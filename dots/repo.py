@@ -62,7 +62,6 @@ class DotRepository:
         """
         Recursively (deepest to shortest) delete empty directories
         :param bottom: path from which deletion should start
-        :param quiet: if False, asks for confirmation before deleting a folder
         :return: None
         """
         if not os.listdir(bottom):
