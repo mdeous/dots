@@ -49,7 +49,7 @@ class DotRepository:
         :return: None
         """
         if not os.path.exists(self.path):
-            self.log.error("No dots repository found at '{}'".format(self.path))
+            self.log.error(f"No dots repository found at '{self.path}'")
         if not os.path.exists(self.files_path):
             self.log.error("Corrupted repository, the 'files' subfolder is missing")
         if not os.path.exists(self.enc_files_path):
@@ -65,9 +65,9 @@ class DotRepository:
         :return: None
         """
         if not os.listdir(bottom):
-            if not self.log.ask_yesno("Delete empty folder '{}'?".format(bottom), default='y'):
+            if not self.log.ask_yesno(f"Delete empty folder '{bottom}'?", default='y'):
                 return
-            self.log.debug('Deleting empty folder: {}'.format(bottom))
+            self.log.debug(f'Deleting empty folder: {bottom}')
             os.rmdir(bottom)
             self.rm_empty_folders(os.path.split(bottom)[0])
 
@@ -78,7 +78,7 @@ class DotRepository:
         :return: None
         """
         self.git_repo.git.add(all=True)
-        self.git_repo.git.commit(message='[dots] {}'.format(msg))
+        self.git_repo.git.commit(message=f'[dots] {msg}')
 
     def cmd_init(self, _args):
         """
@@ -88,10 +88,10 @@ class DotRepository:
         self.log.debug('Initializing repository...')
         # check if a repository already exists
         if os.path.exists(self.path):
-            self.log.warning("Folder already exists: {}".format(self.path))
+            self.log.warning(f"Folder already exists: {self.path}")
             if self.log.ask_yesno('Overwrite existing repository?', default='n'):
                 shutil.rmtree(self.path)
-                self.log.debug("Creating folder: {}".format(self.path))
+                self.log.debug(f"Creating folder: {self.path}")
                 os.mkdir(self.path)
             else:
                 return
@@ -103,14 +103,14 @@ class DotRepository:
             ofile.write('encrypted/*.cleartext\n')
         # create repository subfolders
         for dirpath in (self.files_path, self.enc_files_path):
-            self.log.debug("Creating folder: {}".format(dirpath))
+            self.log.debug(f"Creating folder: {dirpath}")
             os.mkdir(dirpath)
             self.log.debug("Adding .gitkeep file")
             with open(os.path.join(dirpath, '.gitkeep'), 'w') as _outf:
                 pass
         self.log.debug('Adding new files to Git')
         self.git_commit('initial commit')
-        self.log.debug('Creating new branch: {}'.format(self.hostname))
+        self.log.debug(f'Creating new branch: {self.hostname}')
         self.git_repo.head.reference = self.git_repo.create_head(self.hostname, 'HEAD')
         assert not self.git_repo.head.is_detached
         self.git_repo.head.reset(index=True, working_tree=True)
@@ -131,22 +131,22 @@ class DotRepository:
         :param args: command-line arguments
         :return: None
         """
-        self.log.debug("Adding '{}' to the repository...".format(args.file))
+        self.log.debug(f"Adding '{args.file}' to the repository...")
         self.check_repo()
         # TODO: implement encryption
         if args.encrypted:
             raise NotImplementedError('encryption is not implemented yet')
         # check if file exists
         if not os.path.exists(args.file):
-            self.log.error('File not found: {}'.format(args.file))
+            self.log.error(f'File not found: {args.file}')
         if os.path.islink(args.file):
             if os.path.realpath(args.file).startswith(self.files_path):
-                self.log.error('File is already in the repository: {}'.format(args.file))
+                self.log.error(f'File is already in the repository: {args.file}')
             else:
-                self.log.error('Can not add link file: {}'.format(args.file))
+                self.log.error(f'Can not add link file: {args.file}')
         # check if file is in a subfolder of the home directory
         if not args.file.startswith(self.homedir):
-            self.log.error('File is not in a subfolder of {}'.format(self.homedir))
+            self.log.error(f'File is not in a subfolder of {self.homedir}')
         if args.file.startswith(self.path):
             self.log.error("Files inside the repository can't be added")
         # generate paths
@@ -157,7 +157,7 @@ class DotRepository:
         repo_file = os.path.join(repo_dir, filename)
         # move file into the repository and create symlink
         if not os.path.exists(repo_dir):
-            self.log.debug('Creating folder: {}'.format(repo_dir))
+            self.log.debug(f'Creating folder: {repo_dir}')
             os.makedirs(repo_dir)
         self.log.debug('Moving {} to {}'.format(args.file, repo_file))
         shutil.move(args.file, repo_file)
@@ -165,8 +165,8 @@ class DotRepository:
         os.symlink(repo_file, args.file)
         # add new file to Git
         self.log.debug('Adding new file to Git')
-        self.git_commit('add {}'.format(args.file))
-        self.log.info('File added: {}'.format(args.file))
+        self.git_commit(f'add {args.file}')
+        self.log.info(f'File added: {args.file}')
 
     def cmd_rm(self, args):
         """
@@ -174,25 +174,25 @@ class DotRepository:
         :param args: command-line arguments
         :return: None
         """
-        self.log.debug("Removing '{}' from the repository...".format(args.file))
+        self.log.debug(f"Removing '{args.file}' from the repository...")
         self.check_repo()
         # check if file is inside the repository and if original file is indeed a symlink
         filepath = os.path.realpath(args.file)
         if not filepath.startswith(self.files_path):
-            self.log.error('Not a repository file: {}'.format(args.file))
+            self.log.error(f'Not a repository file: {args.file}')
         orig_path = filepath.replace(self.files_path, self.homedir)
         if not os.path.islink(orig_path):
-            self.log.error('Original file path is not a symlink: {}'.format(orig_path))
+            self.log.error(f'Original file path is not a symlink: {orig_path}')
         # move file to its original location
-        self.log.debug('Deleting symlink: {}'.format(orig_path))
+        self.log.debug(f'Deleting symlink: {orig_path}')
         os.unlink(orig_path)
         self.log.debug('Moving file to its original location')
         shutil.move(filepath, orig_path)
         # check for empty dirs to remove
         self.rm_empty_folders(os.path.split(filepath)[0])
         self.log.debug('Removing file from Git')
-        self.git_commit('remove {}'.format(args.file))
-        self.log.info('File removed: {}'.format(args.file))
+        self.git_commit(f'remove {args.file}')
+        self.log.info(f'File removed: {args.file}')
 
     def cmd_sync(self, args, list_only=False):
         """
@@ -224,9 +224,9 @@ class DotRepository:
                         if not os.path.exists(linkdir):
                             os.makedirs(linkpath)
                         os.symlink(fpath, linkpath)
-                        self.log.info('Synced: {}'.format(linkpath))
+                        self.log.info(f'Synced: {linkpath}')
                     else:
-                        self.log.notice('Not synced: {}'.format(linkpath))
+                        self.log.notice(f'Not synced: {linkpath}')
                 else:
                     if os.path.islink(linkpath):
                         # target path already exists
@@ -237,17 +237,17 @@ class DotRepository:
                                 if not args.force:
                                     if not self.log.ask_yesno('Overwrite existing link?', default='n'):
                                         continue
-                                self.log.debug('Installing link in place of existing link: {}'.format(linkpath))
+                                self.log.debug(f'Installing link in place of existing link: {linkpath}')
                                 os.unlink(linkpath)
                                 os.symlink(fpath, linkpath)
                         else:
-                            self.log.info('OK: {}'.format(linkpath))
+                            self.log.info(f'OK: {linkpath}')
                     else:  # linkpath is a regular file
-                        self.log.warning('Conflict (file already exists): {}'.format(linkpath))
+                        self.log.warning(f'Conflict (file already exists): {linkpath}')
                         if not list_only:
                             if not args.force:
                                 if not self.log.ask_yesno('Overwrite existing file?', default='n'):
                                     continue
-                            self.log.debug('Installing link in place of existing file: {}'.format(linkpath))
+                            self.log.debug(f'Installing link in place of existing file: {linkpath}')
                             os.unlink(linkpath)
                             os.symlink(fpath, linkpath)

@@ -20,7 +20,7 @@ class Logger:
         if color is None or color not in COLORS:
             print(msg)
         else:
-            print('{colorcode}{msg}\033[0;0m'.format(colorcode=COLORS[color], msg=msg))
+            print(f'{COLORS[color]}{msg}\033[0;0m')
 
     def debug(self, msg: str):
         if self.verbose:
@@ -41,8 +41,8 @@ class Logger:
 
     @staticmethod
     def ask(msg: str):
-        msg = '[??] {}'.format(msg)
-        question = '{colorcode}{msg} : \033[0;0m'.format(colorcode=COLORS['boldblue'], msg=msg)
+        msg = f'[??] {msg}'
+        question = f'{COLORS["boldblue"]}{msg} : \033[0;0m'
         answer = input(question)
         return answer.strip()
 
@@ -55,7 +55,7 @@ class Logger:
             default = ''
         else:
             default = default.lower()
-        question = '{} (y/n)'.replace(default, default.upper()).format(msg)
+        question = f'{msg} ' + '(y/n)'.replace(default, default.upper())
         answer = self.ask(question).lower()
         if answer == '':
             answer = default

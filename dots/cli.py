@@ -67,7 +67,7 @@ def parse_args():
 
     args = parser.parse_args()
     if args.version:
-        print('dots {}'.format(VERSION))
+        print(f'dots {VERSION}')
         exit(0)
     if not hasattr(args, 'func'):
         # show help if no command was given
@@ -87,7 +87,7 @@ def main():
     })
     cfg.read(args.config)
     repo = DotRepository(cfg, verbose=args.verbose)
-    method_name = 'cmd_{}'.format(args.func)
+    method_name = f'cmd_{args.func}'
     method_obj = getattr(repo, method_name)
     method_obj(args)
 
