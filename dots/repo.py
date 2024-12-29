@@ -80,7 +80,7 @@ class DotRepository:
         self.git_repo.git.add(all=True)
         self.git_repo.git.commit(message='[dots] {}'.format(msg))
 
-    def cmd_init(self, _):
+    def cmd_init(self, _args):
         """
         Initializes the dots repository.
         :return: None
@@ -106,7 +106,7 @@ class DotRepository:
             self.log.debug("Creating folder: {}".format(dirpath))
             os.mkdir(dirpath)
             self.log.debug("Adding .gitkeep file")
-            with open(os.path.join(dirpath, '.gitkeep'), 'w') as _:
+            with open(os.path.join(dirpath, '.gitkeep'), 'w') as _outf:
                 pass
         self.log.debug('Adding new files to Git')
         self.git_commit('initial commit')
