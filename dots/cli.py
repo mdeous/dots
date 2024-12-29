@@ -93,3 +93,7 @@ def main():
     method_name = 'cmd_{}'.format(args.func)
     method_obj = getattr(repo, method_name)
     method_obj(args)
+
+
+if __name__ == "__main__":
+    main()
