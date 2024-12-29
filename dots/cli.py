@@ -5,7 +5,6 @@ from configparser import ConfigParser
 import os.path
 
 from dots import VERSION
-from dots.logger import logger
 from dots.repo import DotRepository
 
 
@@ -74,8 +73,6 @@ def parse_args():
         # show help if no command was given
         parser.print_help()
         exit(1)
-    if args.verbose:
-        logger.verbose = True
     if hasattr(args, 'file'):
         args.file = os.path.abspath(os.path.expanduser(args.file))
     return args
@@ -89,7 +86,7 @@ def main():
         'ignored_files': ''
     })
     cfg.read(args.config)
-    repo = DotRepository(cfg)
+    repo = DotRepository(cfg, verbose=args.verbose)
     method_name = 'cmd_{}'.format(args.func)
     method_obj = getattr(repo, method_name)
     method_obj(args)

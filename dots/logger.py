@@ -2,6 +2,7 @@
 
 COLORS = {
     'green': '\033[22;32m',
+    'boldgreen': '\033[01;32m',
     'boldblue': '\033[01;34m',
     'purple': '\033[22;35m',
     'red': '\033[22;31m',
@@ -11,8 +12,8 @@ COLORS = {
 
 
 class Logger:
-    def __init__(self):
-        self.verbose = False
+    def __init__(self, verbose=False):
+        self.verbose = verbose
 
     @staticmethod
     def _print_msg(msg: str, color: str=None):
@@ -23,19 +24,18 @@ class Logger:
 
     def debug(self, msg: str):
         if self.verbose:
-            msg = '[DD] {}'.format(msg)
-            self._print_msg(msg, 'normal')
+            self._print_msg(msg, 'purple')
 
     def info(self, msg: str):
-        msg = '[II] {}'.format(msg)
         self._print_msg(msg, 'green')
 
+    def notice(self, msg: str):
+        self._print_msg(msg, 'boldgreen')
+
     def warning(self, msg: str):
-        msg = '[WW] {}'.format(msg)
         self._print_msg(msg, 'red')
 
     def error(self, msg: str, exitcode: int=255):
-        msg = '[EE] {}'.format(msg)
         self._print_msg(msg, 'boldred')
         exit(exitcode)
 
