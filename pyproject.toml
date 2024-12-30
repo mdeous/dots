@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "dots"
+version = "0.1.0"
+description = "Configuration files management tool"
+authors = ["Mathieu Deous <mat.deous@gmail.com>"]
+readme = "README.md"
+license = "BSD-3-Clause"
+repository = "https://github.com/mdeous/dots"
+
+[tool.poetry.scripts]
+dots = "dots.cli:main"
+
+[tool.poetry.dependencies]
+python = "^3.13"
+gitpython = "^3.1.43"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
