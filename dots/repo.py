@@ -37,7 +37,6 @@ class DotRepository:
         if self.hostname in cfg:
             section = cfg[self.hostname]
         self.path = os.path.abspath(os.path.expanduser(section['repo_dir']))
-        self.gpg_key_id = section['gpg_key_id']
         self.ignored_files = section['ignored_files'].split(',')
         self.ignored_files.append('.gitkeep')
 
@@ -91,8 +90,6 @@ class DotRepository:
                 return
         self.log.debug('Initializing git repository')
         self.git_repo = Repo.init(self.path)
-        self.log.debug('Adding new files to Git')
-        self.git_commit('initial commit')
         self.log.debug(f'Creating new branch: {self.hostname}')
         self.git_repo.head.reference = self.git_repo.create_head(self.hostname, 'HEAD')
         assert not self.git_repo.head.is_detached
