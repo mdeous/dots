@@ -23,8 +23,6 @@ class DotRepository:
         self.ignored_files = []
         self.log = Logger(verbose=verbose)
         self.load_config(cfg)
-        self.files_path = os.path.join(self.path, 'files')
-        self.enc_files_path = os.path.join(self.path, 'encrypted')
         self.git_repo = None
 
     def load_config(self, cfg: ConfigParser):
@@ -50,10 +48,6 @@ class DotRepository:
         """
         if not os.path.exists(self.path):
             self.log.error(f"No dots repository found at '{self.path}'")
-        if not os.path.exists(self.files_path):
-            self.log.error("Corrupted repository, the 'files' subfolder is missing")
-        if not os.path.exists(self.enc_files_path):
-            self.log.error("Corrupted repository, the 'encrypted' subfolder is missing")
         if not os.path.exists(os.path.join(self.path, '.git')):
             self.log.error("Corrupted repository, folder exists but is not versioned")
         self.git_repo = Repo(self.path)
@@ -97,17 +91,6 @@ class DotRepository:
                 return
         self.log.debug('Initializing git repository')
         self.git_repo = Repo.init(self.path)
-        # create .gitignore to avoid tracking decrypted files
-        self.log.debug('Adding decrypted files to git ignore list')
-        with open(os.path.join(self.path, '.gitignore'), 'a') as ofile:
-            ofile.write('encrypted/*.cleartext\n')
-        # create repository subfolders
-        for dirpath in (self.files_path, self.enc_files_path):
-            self.log.debug(f"Creating folder: {dirpath}")
-            os.mkdir(dirpath)
-            self.log.debug("Adding .gitkeep file")
-            with open(os.path.join(dirpath, '.gitkeep'), 'w') as _outf:
-                pass
         self.log.debug('Adding new files to Git')
         self.git_commit('initial commit')
         self.log.debug(f'Creating new branch: {self.hostname}')
@@ -140,7 +123,7 @@ class DotRepository:
         if not os.path.exists(args.file):
             self.log.error(f'File not found: {args.file}')
         if os.path.islink(args.file):
-            if os.path.realpath(args.file).startswith(self.files_path):
+            if os.path.realpath(args.file).startswith(self.path):
                 self.log.error(f'File is already in the repository: {args.file}')
             else:
                 self.log.error(f'Can not add link file: {args.file}')
@@ -153,7 +136,7 @@ class DotRepository:
         repo_relpath = args.file.replace(self.homedir, '')[1:]
         filename = os.path.split(args.file)[1]
         repo_subdirs = os.path.split(repo_relpath)[0].split(os.path.sep)
-        repo_dir = os.path.join(self.files_path, *repo_subdirs)
+        repo_dir = os.path.join(self.path, *repo_subdirs)
         repo_file = os.path.join(repo_dir, filename)
         # move file into the repository and create symlink
         if not os.path.exists(repo_dir):
@@ -178,9 +161,9 @@ class DotRepository:
         self.check_repo()
         # check if file is inside the repository and if original file is indeed a symlink
         filepath = os.path.realpath(args.file)
-        if not filepath.startswith(self.files_path):
+        if not filepath.startswith(self.path):
             self.log.error(f'Not a repository file: {args.file}')
-        orig_path = filepath.replace(self.files_path, self.homedir)
+        orig_path = filepath.replace(self.path, self.homedir)
         if not os.path.islink(orig_path):
             self.log.error(f'Original file path is not a symlink: {orig_path}')
         # move file to its original location
@@ -203,10 +186,10 @@ class DotRepository:
         """
         if not list_only:
             self.log.debug('Synchronizing repository files...')
-        for curdir, dirs, files in os.walk(self.files_path):
+        for curdir, dirs, files in os.walk(self.path):
             for f in files:
                 ignore_file = False
-                repo_path = os.path.join(curdir, f).replace(self.files_path, '')
+                repo_path = os.path.join(curdir, f).replace(self.path, '')
                 for ignored in self.ignored_files:
                     if ignored.startswith('/'):
                         f = os.path.join(repo_path, f)
@@ -217,7 +200,7 @@ class DotRepository:
                 if ignore_file:
                     continue
                 fpath = os.path.join(curdir, f)
-                linkpath = fpath.replace(self.files_path, self.homedir)
+                linkpath = fpath.replace(self.path, self.homedir)
                 if not os.path.exists(linkpath) and not os.path.islink(linkpath):
                     if not list_only:
                         linkdir = os.path.dirname(linkpath)

@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from argparse import ArgumentParser
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
 from configparser import ConfigParser
 import os.path
 
@@ -9,10 +9,13 @@ from dots.repo import DotRepository
 
 
 def parse_args():
-    parser = ArgumentParser(description='Configuration files management tool.')
+    parser = ArgumentParser(
+        description='Configuration files management tool.',
+        formatter_class=ArgumentDefaultsHelpFormatter
+    )
     parser.add_argument(
         '-c', '--config',
-        help='configuration file (default: ~/.dots.conf)',
+        help='configuration file',
         default='~/.dots.conf'
     )
     parser.add_argument(
@@ -27,7 +30,7 @@ def parse_args():
     )
     parser.add_argument(
         '-v', '--verbose',
-        help='display debug information (default: false)',
+        help='display debug information',
         action='store_true'
     )
     subparsers = parser.add_subparsers(help='command help')
@@ -43,11 +46,6 @@ def parse_args():
     parser_add.add_argument(
         'file',
         help='path of the file to add'
-    )
-    parser_add.add_argument(
-        '-e', '--encrypted',
-        help='encrypt file for versioning (default: false)',
-        action='store_true'
     )
 
     parser_rm = subparsers.add_parser('rm', help='remove file from the repository')
@@ -82,7 +80,6 @@ def main():
     args = parse_args()
     cfg = ConfigParser(defaults={
         'repo_dir': '~/dots',
-        'gpg_key_id': '',
         'ignored_files': ''
     })
     cfg.read(args.config)
