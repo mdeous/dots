@@ -19,11 +19,6 @@ def parse_args():
         default='~/.dots.conf'
     )
     parser.add_argument(
-        '--repo-dir',
-        help='custom repository path',
-        metavar='DIR'
-    )
-    parser.add_argument(
         '-V', '--version',
         help='display program version and exit',
         action='store_true'
