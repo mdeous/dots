@@ -10,13 +10,13 @@ from dots.logger import Logger
 
 from git import Repo
 
+HOME = os.path.expanduser('~')
+
 
 class DotRepository:
     """
     The `dots` repository object. Abstracts operations to the repository.
     """
-    homedir = os.path.expanduser('~')
-
     def __init__(self, cfg: ConfigParser, verbose: bool=False):
         self.hostname = platform.node()
         self.git_repo = None
@@ -74,13 +74,13 @@ class DotRepository:
                 self.log.error(f'Can not add link file: {target_file}')
 
         # check if file is in a subfolder of the home directory
-        if not target_file.startswith(self.homedir):
-            self.log.error(f'File is not in a subfolder of {self.homedir}')
+        if not target_file.startswith(HOME):
+            self.log.error(f'File is not in a subfolder of {HOME}')
         if target_file.startswith(self.path):
             self.log.error("Files inside the repository can't be added")
 
         # generate paths
-        repo_relpath = target_file.replace(self.homedir, '')[1:]
+        repo_relpath = target_file.replace(HOME, '')[1:]
         filename = os.path.split(target_file)[1]
         repo_subdirs = os.path.split(repo_relpath)[0].split(os.path.sep)
         repo_dir = os.path.join(self.path, *repo_subdirs)
@@ -150,7 +150,7 @@ class DotRepository:
         filepath = os.path.realpath(args.file)
         if not filepath.startswith(self.path):
             self.log.error(f'Not a repository file: {args.file}')
-        orig_path = filepath.replace(self.path, self.homedir)
+        orig_path = filepath.replace(self.path, HOME)
         if not os.path.islink(orig_path):
             self.log.error(f'Original file path is not a symlink: {orig_path}')
 
@@ -190,7 +190,7 @@ class DotRepository:
                 if ignore_file:
                     continue
                 fpath = os.path.join(curdir, f)
-                linkpath = fpath.replace(self.path, self.homedir)
+                linkpath = fpath.replace(self.path, HOME)
                 if not os.path.exists(linkpath) and not os.path.islink(linkpath):
                     if not list_only:
                         linkdir = os.path.dirname(linkpath)
