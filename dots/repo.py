@@ -18,27 +18,14 @@ class DotRepository:
 
     def __init__(self, cfg: ConfigParser, verbose=False):
         self.hostname = platform.node()
-        self.path = ''
-        self.gpg_key_id = ''
-        self.ignored_files = []
-        self.log = Logger(verbose=verbose)
-        self.load_config(cfg)
         self.git_repo = None
+        self.log = Logger(verbose=verbose)
 
-    def load_config(self, cfg: ConfigParser):
-        """
-        Assigns instance variables according to the configuration.
-        :param cfg: a `ConfigParser` object that holds the configuration file content
-        :return: None
-        """
+        # load configuration
         self.log.debug('Loading configuration file')
-        section = cfg['DEFAULT']
-        # use host-specific configuration, if any
-        if self.hostname in cfg:
-            section = cfg[self.hostname]
+        section = cfg[self.hostname] if self.hostname in cfg else cfg['DEFAULT']
         self.path = os.path.abspath(os.path.expanduser(section['repo_dir']))
         self.ignored_files = section['ignored_files'].split(',')
-        self.ignored_files.append('.gitkeep')
 
     def check_repo(self):
         """
@@ -113,9 +100,7 @@ class DotRepository:
         """
         self.log.debug(f"Adding '{args.file}' to the repository...")
         self.check_repo()
-        # TODO: implement encryption
-        if args.encrypted:
-            raise NotImplementedError('encryption is not implemented yet')
+
         # check if file exists
         if not os.path.exists(args.file):
             self.log.error(f'File not found: {args.file}')
@@ -124,17 +109,20 @@ class DotRepository:
                 self.log.error(f'File is already in the repository: {args.file}')
             else:
                 self.log.error(f'Can not add link file: {args.file}')
+
         # check if file is in a subfolder of the home directory
         if not args.file.startswith(self.homedir):
             self.log.error(f'File is not in a subfolder of {self.homedir}')
         if args.file.startswith(self.path):
             self.log.error("Files inside the repository can't be added")
+
         # generate paths
         repo_relpath = args.file.replace(self.homedir, '')[1:]
         filename = os.path.split(args.file)[1]
         repo_subdirs = os.path.split(repo_relpath)[0].split(os.path.sep)
         repo_dir = os.path.join(self.path, *repo_subdirs)
         repo_file = os.path.join(repo_dir, filename)
+
         # move file into the repository and create symlink
         if not os.path.exists(repo_dir):
             self.log.debug(f'Creating folder: {repo_dir}')
@@ -143,6 +131,7 @@ class DotRepository:
         shutil.move(args.file, repo_file)
         self.log.debug('Creating symlink')
         os.symlink(repo_file, args.file)
+
         # add new file to Git
         self.log.debug('Adding new file to Git')
         self.git_commit(f'add {args.file}')
@@ -156,6 +145,7 @@ class DotRepository:
         """
         self.log.debug(f"Removing '{args.file}' from the repository...")
         self.check_repo()
+
         # check if file is inside the repository and if original file is indeed a symlink
         filepath = os.path.realpath(args.file)
         if not filepath.startswith(self.path):
@@ -163,11 +153,13 @@ class DotRepository:
         orig_path = filepath.replace(self.path, self.homedir)
         if not os.path.islink(orig_path):
             self.log.error(f'Original file path is not a symlink: {orig_path}')
+
         # move file to its original location
         self.log.debug(f'Deleting symlink: {orig_path}')
         os.unlink(orig_path)
         self.log.debug('Moving file to its original location')
         shutil.move(filepath, orig_path)
+
         # check for empty dirs to remove
         self.rm_empty_folders(os.path.split(filepath)[0])
         self.log.debug('Removing file from Git')
@@ -184,6 +176,8 @@ class DotRepository:
         if not list_only:
             self.log.debug('Synchronizing repository files...')
         for curdir, dirs, files in os.walk(self.path):
+            if '.git' in dirs:
+                dirs.remove('.git')
             for f in files:
                 ignore_file = False
                 repo_path = os.path.join(curdir, f).replace(self.path, '')
@@ -222,7 +216,8 @@ class DotRepository:
                                 os.symlink(fpath, linkpath)
                         else:
                             self.log.info(f'OK: {linkpath}')
-                    else:  # linkpath is a regular file
+                    else:
+                        # target path is a regular file
                         self.log.warning(f'Conflict (file already exists): {linkpath}')
                         if not list_only:
                             if not args.force:
