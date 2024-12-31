@@ -12,7 +12,7 @@ COLORS = {
 
 
 class Logger:
-    def __init__(self, verbose=False):
+    def __init__(self, verbose: bool=False):
         self.verbose = verbose
 
     @staticmethod

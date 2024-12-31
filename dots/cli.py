@@ -1,6 +1,6 @@
 # coding: utf-8
 
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter
+from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from configparser import ConfigParser
 import os.path
 
@@ -8,7 +8,7 @@ from dots import VERSION
 from dots.repo import DotRepository
 
 
-def parse_args():
+def parse_args() -> Namespace:
     parser = ArgumentParser(
         description='Configuration files management tool.',
         formatter_class=ArgumentDefaultsHelpFormatter

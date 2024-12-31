@@ -2,6 +2,7 @@
 import os
 import platform
 import shutil
+from argparse import Namespace
 from configparser import ConfigParser
 from fnmatch import fnmatch
 
@@ -16,7 +17,7 @@ class DotRepository:
     """
     homedir = os.path.expanduser('~')
 
-    def __init__(self, cfg: ConfigParser, verbose=False):
+    def __init__(self, cfg: ConfigParser, verbose: bool=False):
         self.hostname = platform.node()
         self.git_repo = None
         self.log = Logger(verbose=verbose)
@@ -30,7 +31,6 @@ class DotRepository:
     def check_repo(self):
         """
         Checks if the repository structure is valid, outputs an error and exits otherwise.
-        :return: None
         """
         if not os.path.exists(self.path):
             self.log.error(f"No dots repository found at '{self.path}'")
@@ -42,7 +42,6 @@ class DotRepository:
         """
         Recursively (deepest to shortest) delete empty directories
         :param bottom: path from which deletion should start
-        :return: None
         """
         if not os.listdir(bottom):
             if not self.log.ask_yesno(f"Delete empty folder '{bottom}'?", default='y'):
@@ -51,20 +50,18 @@ class DotRepository:
             os.rmdir(bottom)
             self.rm_empty_folders(os.path.split(bottom)[0])
 
-    def git_commit(self, msg):
+    def git_commit(self, msg: str):
         """
         Adds repository changes to Git and commits.
         :param msg: commit message
-        :return: None
         """
         self.git_repo.git.add(all=True)
         self.git_repo.git.commit(message=f'[dots] {msg}')
 
-    def add_file(self, target_file):
+    def add_file(self, target_file: str):
         """
         Adds a file to the repository.
         :param target_file: path of the file to add
-        :return: None
         """
         self.log.debug(f"Adding '{target_file}' to the repository...")
         # check if file exists
@@ -106,7 +103,6 @@ class DotRepository:
     def cmd_init(self, _args):
         """
         Initializes the dots repository.
-        :return: None
         """
         self.log.debug('Initializing repository...')
         # check if a repository already exists
@@ -125,30 +121,27 @@ class DotRepository:
         assert not self.git_repo.head.is_detached
         self.git_repo.head.reset(index=True, working_tree=True)
 
-    def cmd_list(self, args):
+    def cmd_list(self, args: Namespace):
         """
         Lists repository content.
         :param args: command-line arguments
-        :return: None
         """
         self.log.debug('Listing repository content...')
         # TODO: show files as a tree
         self.cmd_sync(args, list_only=True)
 
-    def cmd_add(self, args):
+    def cmd_add(self, args: Namespace):
         """
         Adds a new file to the repository.
         :param args: command-line arguments
-        :return: None
         """
         self.check_repo()
         self.add_file(args.file)
 
-    def cmd_rm(self, args):
+    def cmd_rm(self, args: Namespace):
         """
         Removes a file from the repository.
         :param args: command-line arguments
-        :return: None
         """
         self.log.debug(f"Removing '{args.file}' from the repository...")
         self.check_repo()
@@ -173,12 +166,11 @@ class DotRepository:
         self.git_commit(f'remove {args.file}')
         self.log.info(f'File removed: {args.file}')
 
-    def cmd_sync(self, args, list_only=False):
+    def cmd_sync(self, args: Namespace, list_only: bool=False):
         """
         Synchronizes repository content (adds missing symlinks and warns about conflicts).
         :param args: command-line arguments
         :param list_only: only list repository content (do not fix unsynced files)
-        :return: None
         """
         if not list_only:
             self.log.debug('Synchronizing repository files...')
