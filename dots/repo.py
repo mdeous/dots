@@ -38,17 +38,17 @@ class DotRepository:
             self.log.error("Corrupted repository, folder exists but is not versioned")
         self.git_repo = Repo(self.path)
 
-    def rm_empty_folders(self, bottom: str):
+    def rm_empty_folders(self, leaf: str):
         """
-        Recursively (deepest to shortest) delete empty directories
-        :param bottom: path from which deletion should start
+        Recursively (bottom-up) delete empty directories
+        :param leaf: path from which deletion should start
         """
-        if not os.listdir(bottom):
-            if not self.log.ask_yesno(f"Delete empty folder '{bottom}'?", default='y'):
+        if not os.listdir(leaf):
+            if not self.log.ask_yesno(f"Delete empty folder '{leaf}'?", default='y'):
                 return
-            self.log.debug(f'Deleting empty folder: {bottom}')
-            os.rmdir(bottom)
-            self.rm_empty_folders(os.path.split(bottom)[0])
+            self.log.debug(f'Deleting empty folder: {leaf}')
+            os.rmdir(leaf)
+            self.rm_empty_folders(os.path.split(leaf)[0])
 
     def git_commit(self, msg: str):
         """
@@ -172,6 +172,17 @@ class DotRepository:
         :param args: command-line arguments
         :param list_only: only list repository content (do not fix unsynced files)
         """
+        def force_add(file_path: str, link_path: str):
+            self.log.debug(f'Deleting existing repository file: {file_path}')
+            os.unlink(file_path)
+            self.add_file(link_path)
+        def force_link(file_path: str, link_path: str):
+            self.log.debug(f'Deleting local file: {link_path}')
+            os.unlink(link_path)
+            os.symlink(file_path, link_path)
+            self.log.info(f'Replaced local file: {link_path}')
+
+        self.check_repo()
         if not list_only:
             self.log.debug('Synchronizing repository files...')
         for curdir, dirs, files in os.walk(self.path):
@@ -205,28 +216,29 @@ class DotRepository:
                         # target path already exists
                         frealpath = os.path.realpath(linkpath)
                         if frealpath != fpath:
-                            self.log.warning('Conflict (invalid link): {} -> {}'.format(linkpath, frealpath))
+                            link_state = 'valid' if os.path.exists(frealpath) else 'broken'
+                            self.log.warning(f'Conflict ({link_state} link): {linkpath} -> {frealpath}')
                             if not list_only:
-                                if not args.force:
+                                if not args.force_relink:
                                     if not self.log.ask_yesno('Overwrite existing link?', default='n'):
                                         continue
-                                self.log.debug(f'Installing link in place of existing link: {linkpath}')
                                 os.unlink(linkpath)
                                 os.symlink(fpath, linkpath)
+                                self.log.info(f'Replaced link: {linkpath}')
                         else:
                             self.log.info(f'OK: {linkpath}')
                     else:
                         # target path is a regular file
                         self.log.warning(f'Conflict (file exists): {linkpath}')
                         if not list_only:
-                            if not args.force:
+                            if args.force_add:
+                                force_add(fpath, linkpath)
+                            elif args.force_link:
+                                force_link(fpath, linkpath)
+                            else:
                                 if self.log.ask_yesno('Replace repository file?', default='n'):
-                                    self.log.debug(f'Deleting existing repository file: {fpath}')
-                                    os.unlink(fpath)
-                                    self.add_file(linkpath)
+                                    force_add(fpath, linkpath)
                                     continue
-                                if not self.log.ask_yesno('Overwrite existing file?', default='n'):
+                                if self.log.ask_yesno('Replace local file?', default='n'):
+                                    force_link(fpath, linkpath)
                                     continue
-                            self.log.debug(f'Installing link in place of existing file: {linkpath}')
-                            os.unlink(linkpath)
-                            os.symlink(fpath, linkpath)

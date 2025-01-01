@@ -33,9 +33,6 @@ def parse_args() -> Namespace:
     parser_init = subparsers.add_parser('init', help='initialize dots repository')
     parser_init.set_defaults(func='init')
 
-    parser_list = subparsers.add_parser('list', help='list repository content')
-    parser_list.set_defaults(func='list')
-
     parser_add = subparsers.add_parser('add', help='add file to the repository')
     parser_add.set_defaults(func='add')
     parser_add.add_argument(
@@ -50,11 +47,25 @@ def parse_args() -> Namespace:
         help='path of the file to remove'
     )
 
+    parser_list = subparsers.add_parser('list', help='list repository content')
+    parser_list.set_defaults(func='list')
+
     parser_sync = subparsers.add_parser('sync', help='synchronize config and repo files')
     parser_sync.set_defaults(func='sync')
     parser_sync.add_argument(
-        '-f', '--force',
-        help='overwrite possibly existing files (default: false)',
+        '-r', '--force-relink',
+        help='if a link points to another file, overwrite it without asking',
+        action='store_true'
+    )
+    parser_file_exists = parser_sync.add_mutually_exclusive_group()
+    parser_file_exists.add_argument(
+        '-a', '--force-add',
+        help='if a file already exists, overwrite the repository version without asking',
+        action='store_true'
+    )
+    parser_file_exists.add_argument(
+        '-l', '--force-link',
+        help='If a file already exists, overwrite the local version without asking',
         action='store_true'
     )
 
@@ -63,7 +74,7 @@ def parse_args() -> Namespace:
         print(f'dots {VERSION}')
         exit(0)
     if not hasattr(args, 'func'):
-        # show help if no command was given
+        # show help if no command was provided
         parser.print_help()
         exit(1)
     if hasattr(args, 'file'):
