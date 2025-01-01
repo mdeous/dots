@@ -81,10 +81,10 @@ class DotRepository:
 
         # generate paths
         repo_relpath = target_file.replace(HOME, '')[1:]
-        filename = os.path.split(target_file)[1]
+        file_name = os.path.split(target_file)[1]
         repo_subdirs = os.path.split(repo_relpath)[0].split(os.path.sep)
         repo_dir = os.path.join(self.path, *repo_subdirs)
-        repo_file = os.path.join(repo_dir, filename)
+        repo_file = os.path.join(repo_dir, file_name)
 
         # move file into the repository and create symlink
         if not os.path.exists(repo_dir):
@@ -147,10 +147,10 @@ class DotRepository:
         self.check_repo()
 
         # check if file is inside the repository and if original file is indeed a symlink
-        filepath = os.path.realpath(args.file)
-        if not filepath.startswith(self.path):
+        file_path = os.path.realpath(args.file)
+        if not file_path.startswith(self.path):
             self.log.error(f'Not a repository file: {args.file}')
-        orig_path = filepath.replace(self.path, HOME)
+        orig_path = file_path.replace(self.path, HOME)
         if not os.path.islink(orig_path):
             self.log.error(f'Original file path is not a symlink: {orig_path}')
 
@@ -158,10 +158,10 @@ class DotRepository:
         self.log.debug(f'Deleting symlink: {orig_path}')
         os.unlink(orig_path)
         self.log.debug('Moving file to its original location')
-        shutil.move(filepath, orig_path)
+        shutil.move(file_path, orig_path)
 
         # check for empty dirs to remove
-        self.rm_empty_folders(os.path.split(filepath)[0])
+        self.rm_empty_folders(os.path.split(file_path)[0])
         self.log.debug('Removing file from Git')
         self.git_commit(f'remove {args.file}')
         self.log.info(f'File removed: {args.file}')
@@ -172,15 +172,15 @@ class DotRepository:
         :param args: command-line arguments
         :param list_only: only list repository content (do not fix unsynced files)
         """
-        def force_add(file_path: str, link_path: str):
-            self.log.debug(f'Deleting existing repository file: {file_path}')
-            os.unlink(file_path)
-            self.add_file(link_path)
-        def force_link(file_path: str, link_path: str):
-            self.log.debug(f'Deleting local file: {link_path}')
-            os.unlink(link_path)
-            os.symlink(file_path, link_path)
-            self.log.info(f'Replaced local file: {link_path}')
+        def force_add(fpath: str, lpath: str):
+            self.log.debug(f'Deleting existing repository file: {fpath}')
+            os.unlink(fpath)
+            self.add_file(lpath)
+        def force_link(fpath: str, lpath: str):
+            self.log.debug(f'Deleting local file: {lpath}')
+            os.unlink(lpath)
+            os.symlink(fpath, lpath)
+            self.log.info(f'Replaced local file: {lpath}')
 
         self.check_repo()
         if not list_only:
@@ -200,45 +200,45 @@ class DotRepository:
                         break
                 if ignore_file:
                     continue
-                fpath = os.path.join(curdir, f)
-                linkpath = fpath.replace(self.path, HOME)
-                if not os.path.exists(linkpath) and not os.path.islink(linkpath):
+                file_path = os.path.join(curdir, f)
+                link_path = file_path.replace(self.path, HOME)
+                if not os.path.exists(link_path) and not os.path.islink(link_path):
                     if not list_only:
-                        linkdir = os.path.dirname(linkpath)
+                        linkdir = os.path.dirname(link_path)
                         if not os.path.exists(linkdir):
                             os.makedirs(linkdir)
-                        os.symlink(fpath, linkpath)
-                        self.log.info(f'Installed: {linkpath}')
+                        os.symlink(file_path, link_path)
+                        self.log.info(f'Installed: {link_path}')
                     else:
-                        self.log.notice(f'Missing: {linkpath}')
+                        self.log.notice(f'Missing: {link_path}')
                 else:
-                    if os.path.islink(linkpath):
+                    if os.path.islink(link_path):
                         # target path already exists
-                        frealpath = os.path.realpath(linkpath)
-                        if frealpath != fpath:
-                            link_state = 'valid' if os.path.exists(frealpath) else 'broken'
-                            self.log.warning(f'Conflict ({link_state} link): {linkpath} -> {frealpath}')
+                        link_target = os.path.realpath(link_path)
+                        if link_target != file_path:
+                            link_state = 'valid' if os.path.exists(link_target) else 'broken'
+                            self.log.warning(f'Conflict ({link_state} link): {link_path} -> {link_target}')
                             if not list_only:
                                 if not args.force_relink:
                                     if not self.log.ask_yesno('Overwrite existing link?', default='n'):
                                         continue
-                                os.unlink(linkpath)
-                                os.symlink(fpath, linkpath)
-                                self.log.info(f'Replaced link: {linkpath}')
+                                os.unlink(link_path)
+                                os.symlink(file_path, link_path)
+                                self.log.info(f'Replaced link: {link_path}')
                         else:
-                            self.log.info(f'OK: {linkpath}')
+                            self.log.info(f'OK: {link_path}')
                     else:
                         # target path is a regular file
-                        self.log.warning(f'Conflict (file exists): {linkpath}')
+                        self.log.warning(f'Conflict (file exists): {link_path}')
                         if not list_only:
                             if args.force_add:
-                                force_add(fpath, linkpath)
+                                force_add(file_path, link_path)
                             elif args.force_link:
-                                force_link(fpath, linkpath)
+                                force_link(file_path, link_path)
                             else:
                                 if self.log.ask_yesno('Replace repository file?', default='n'):
-                                    force_add(fpath, linkpath)
+                                    force_add(file_path, link_path)
                                     continue
                                 if self.log.ask_yesno('Replace local file?', default='n'):
-                                    force_link(fpath, linkpath)
+                                    force_link(file_path, link_path)
                                     continue
