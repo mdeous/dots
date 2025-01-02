@@ -41,20 +41,18 @@ class Logger:
 
     @staticmethod
     def ask(msg: str):
-        msg = f'[??] {msg}'
-        question = f'{COLORS["boldblue"]}{msg} : \033[0;0m'
+        question = f'{COLORS["boldblue"]}{msg}\033[0;0m '
         answer = input(question)
         return answer.strip()
 
-    def ask_yesno(self, msg: str, default: str=None):
+    def ask_yesno(self, msg: str, default: str=''):
         valid_answers = {
             'y': True, 'yes': True,
             'n': False, 'no': False
         }
-        if (default is None) or (default.lower() not in valid_answers):
+        default = default.lower()
+        if default and default not in valid_answers:
             default = ''
-        else:
-            default = default.lower()
         question = f'{msg} ' + '(y/n)'.replace(default, default.upper())
         answer = self.ask(question).lower()
         if answer == '':
@@ -62,6 +60,3 @@ class Logger:
         while answer not in valid_answers:
             answer = self.ask(question).lower()
         return valid_answers[answer]
-
-
-logger = Logger()
