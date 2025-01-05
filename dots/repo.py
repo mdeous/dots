@@ -111,7 +111,7 @@ class DotRepository:
         """
         self.add_file(args.file)
 
-    def cmd_rm(self, args: Namespace):
+    def cmd_remove(self, args: Namespace):
         """
         Removes a file from the repository.
         :param args: command-line arguments

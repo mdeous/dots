@@ -3,6 +3,7 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from configparser import ConfigParser
 import os.path
+from encodings.aliases import aliases
 
 from dots import VERSION
 from dots.repo import DotRepository
@@ -37,14 +38,22 @@ def parse_args() -> Namespace:
         help='path of the file to add'
     )
 
-    parser_rm = subparsers.add_parser('rm', help='remove file from the repository')
-    parser_rm.set_defaults(func='rm')
+    parser_rm = subparsers.add_parser(
+        'remove',
+        help='remove file from the repository',
+        aliases=['r', 'rm']
+    )
+    parser_rm.set_defaults(func='remove')
     parser_rm.add_argument(
         'file',
         help='path of the file to remove'
     )
 
-    parser_list = subparsers.add_parser('list', help='list repository content')
+    parser_list = subparsers.add_parser(
+        'list',
+        help='list repository content',
+        aliases=['l', 'ls']
+    )
     parser_list.set_defaults(func='list')
 
     parser_sync = subparsers.add_parser('sync', help='synchronize config and repo files')
