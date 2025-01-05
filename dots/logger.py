@@ -1,4 +1,5 @@
 # coding: utf-8
+import sys
 
 COLORS = {
     'green': '\033[22;32m',
@@ -37,7 +38,7 @@ class Logger:
 
     def error(self, msg: str, exitcode: int=255):
         self._print_msg(msg, 'boldred')
-        exit(exitcode)
+        sys.exit(exitcode)
 
     @staticmethod
     def ask(msg: str):
