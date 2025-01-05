@@ -25,12 +25,18 @@ class DotRepository:
         # load configuration
         self.log.debug('Loading configuration file')
         section = cfg[self.hostname] if self.hostname in cfg else cfg['DEFAULT']
-        self.ignored_files = section['ignored_files'].split(',')
         self.path = os.path.abspath(os.path.expanduser(section['repo_dir']))
+        self.ignored_files = section['ignored_files'].split(',')
+
+    def check_repo(self):
+        """
+        Checks if the repository structure is valid, outputs an error and exits otherwise.
+        """
         if not os.path.exists(self.path):
             self.log.error(f"No dots repository found at '{self.path}'")
-        if os.path.isdir(os.path.join(self.path, '.git')):
-            self.git_repo = Repo(self.path)
+        if not os.path.exists(os.path.join(self.path, '.git')):
+            self.log.error("Corrupted repository, folder exists but is not versioned")
+        self.git_repo = Repo(self.path)
 
     def rm_empty_folders(self, leaf: str):
         """
@@ -43,6 +49,14 @@ class DotRepository:
             self.log.debug(f'Deleting empty folder: {leaf}')
             os.rmdir(leaf)
             self.rm_empty_folders(os.path.split(leaf)[0])
+
+    def git_commit(self, msg: str):
+        """
+        Adds repository changes to Git and commits.
+        :param msg: commit message
+        """
+        self.git_repo.git.add(all=True)
+        self.git_repo.git.commit(message=f'[dots] {msg}')
 
     def add_file(self, target_file: str):
         """
@@ -80,7 +94,32 @@ class DotRepository:
         shutil.move(target_file, repo_file)
         self.log.debug('Creating symlink')
         os.symlink(repo_file, target_file)
+
+        # add new file to Git
+        self.log.debug('Adding new file to Git')
+        self.git_commit(f'add {target_file}')
         self.log.info(f'File added: {target_file}')
+
+    def cmd_init(self, _args):
+        """
+        Initializes the dots repository.
+        """
+        self.log.debug('Initializing repository...')
+        # check if a repository already exists
+        if os.path.exists(self.path):
+            self.log.warning(f"Folder already exists: {self.path}")
+            if self.log.ask_yesno('Overwrite existing repository?', default='n'):
+                shutil.rmtree(self.path)
+                self.log.debug(f"Creating folder: {self.path}")
+                os.mkdir(self.path)
+            else:
+                return
+        self.log.debug('Initializing git repository')
+        self.git_repo = Repo.init(self.path)
+        self.log.debug(f'Creating new branch: {self.hostname}')
+        self.git_repo.head.reference = self.git_repo.create_head(self.hostname, 'HEAD')
+        assert not self.git_repo.head.is_detached
+        self.git_repo.head.reset(index=True, working_tree=True)
 
     def cmd_list(self, args: Namespace):
         """
@@ -96,6 +135,7 @@ class DotRepository:
         Adds a new file to the repository.
         :param args: command-line arguments
         """
+        self.check_repo()
         self.add_file(args.file)
 
     def cmd_rm(self, args: Namespace):
@@ -104,6 +144,7 @@ class DotRepository:
         :param args: command-line arguments
         """
         self.log.debug(f"Removing '{args.file}' from the repository...")
+        self.check_repo()
 
         # check if file is inside the repository and if original file is indeed a symlink
         file_path = os.path.realpath(args.file)
@@ -121,6 +162,8 @@ class DotRepository:
 
         # check for empty dirs to remove
         self.rm_empty_folders(os.path.split(file_path)[0])
+        self.log.debug('Removing file from Git')
+        self.git_commit(f'remove {args.file}')
         self.log.info(f'File removed: {args.file}')
 
     def cmd_sync(self, args: Namespace, list_only: bool=False):
@@ -139,6 +182,7 @@ class DotRepository:
             os.symlink(fpath, lpath)
             self.log.info(f'Replaced local file: {lpath}')
 
+        self.check_repo()
         if not list_only:
             self.log.debug('Synchronizing repository files...')
         for curdir, dirs, files in os.walk(self.path):
