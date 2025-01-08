@@ -58,6 +58,7 @@ class DotRepository:
         :param target_file: path of the file to add
         """
         self.log.debug(f"Adding '{target_file}' to the repository...")
+
         # check if file exists
         if not os.path.exists(target_file):
             self.log.error(f'File not found: {target_file}')
@@ -74,9 +75,9 @@ class DotRepository:
             self.log.error("Files inside the repository can't be added")
 
         # generate paths
-        repo_relpath = target_file.replace(HOME, '')[1:]
-        file_name = os.path.split(target_file)[1]
-        repo_subdirs = os.path.split(repo_relpath)[0].split(os.path.sep)
+        file_relpath = os.path.relpath(target_file, HOME)
+        file_name = os.path.basename(target_file)
+        repo_subdirs = os.path.split(file_relpath)[0].split(os.path.sep)
         repo_dir = os.path.join(self.path, *repo_subdirs)
         repo_file = os.path.join(repo_dir, file_name)
 
@@ -91,8 +92,8 @@ class DotRepository:
 
         if self.git_repo is not None:
             self.log.debug('Adding new file to Git')
-            self.git_repo.index.add(repo_relpath)
-            self.git_repo.index.commit(f'[dots] added {repo_relpath}')
+            self.git_repo.index.add(file_relpath)
+            self.git_repo.index.commit(f'[dots] added {file_relpath}')
         self.log.info(f'File added: {target_file}')
 
     def cmd_list(self, args: Namespace):
@@ -162,19 +163,19 @@ class DotRepository:
         for curdir, dirs, files in os.walk(self.path):
             if '.git' in dirs:
                 dirs.remove('.git')
-            for f in files:
+            for file_name in files:
                 ignore_file = False
-                repo_path = os.path.join(curdir, f).replace(self.path, '')
+                repo_path = os.path.join(curdir, file_name).replace(self.path, '')
                 for ignored in self.ignored_files:
                     if ignored.startswith('/'):
-                        f = os.path.join(repo_path, f)
-                    if fnmatch(f, ignored):
+                        file_name = os.path.join(repo_path, file_name)
+                    if fnmatch(file_name, ignored):
                         self.log.debug('Ignored file ({}): {}'.format(ignored, repo_path[1:]))
                         ignore_file = True
                         break
                 if ignore_file:
                     continue
-                file_path = os.path.join(curdir, f)
+                file_path = os.path.join(curdir, file_name)
                 link_path = file_path.replace(self.path, HOME)
                 if not os.path.exists(link_path) and not os.path.islink(link_path):
                     if not list_only:
