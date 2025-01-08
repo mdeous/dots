@@ -3,7 +3,6 @@
 from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
 from configparser import ConfigParser
 import os.path
-from encodings.aliases import aliases
 
 from dots import VERSION
 from dots.repo import DotRepository
