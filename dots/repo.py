@@ -1,219 +1,333 @@
-# coding: utf-8
-import os
+from __future__ import annotations
+
+import contextlib
+import fnmatch
 import platform
-import shutil
-from argparse import Namespace
+from collections.abc import Iterator
 from configparser import ConfigParser
-from fnmatch import fnmatch
+from configparser import Error as ConfigParserError
+from dataclasses import dataclass
+from pathlib import Path
 
-from dots.logger import Logger
+from git import Repo as GitRepo
+from git.exc import GitError
 
-from git import Repo
+from dots import fs
+from dots.errors import (
+    AlreadyInRepoError,
+    ConfigError,
+    DotsError,
+    InvalidTargetError,
+    NotInHomeError,
+    NotInRepoError,
+    RepoError,
+)
+from dots.ui import UI
 
-HOME = os.path.expanduser('~')
+
+def _load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
+    """Parse the config file and return ``(repo_dir, ignored_patterns)``.
+
+    Selects a hostname-specific section if one is present, otherwise falls back
+    to ``[DEFAULT]``. Missing config file is not an error — defaults apply.
+    """
+    cfg = ConfigParser(defaults={"repo_dir": "~/dots", "ignored_files": ""})
+    if config_path.is_file():
+        try:
+            cfg.read(config_path)
+        except ConfigParserError as e:
+            raise ConfigError(f"invalid config file {config_path}: {e}") from e
+
+    hostname = platform.node()
+    section_name = hostname if hostname in cfg else "DEFAULT"
+    section = cfg[section_name]
+
+    repo_dir_raw = section.get("repo_dir")
+    if not repo_dir_raw:
+        raise ConfigError(f"missing 'repo_dir' in config section [{section_name}]")
+    repo_dir = Path(repo_dir_raw).expanduser().resolve()
+
+    raw_ignored = section.get("ignored_files", "")
+    ignored = tuple(p.strip() for p in raw_ignored.split(",") if p.strip())
+
+    return repo_dir, ignored
 
 
+@dataclass(frozen=True)
 class DotRepository:
-    """
-    The `dots` repository object. Abstracts operations to the repository.
-    """
-    def __init__(self, cfg: ConfigParser, verbose: bool=False):
-        self.hostname = platform.node()
-        self.git_repo = None
-        self.log = Logger(verbose=verbose)
+    """A dotfiles repository: a directory whose contents are mirrored as symlinks in ``home``."""
 
-        # load configuration
-        self.log.debug('Loading configuration file')
-        section = cfg[self.hostname] if self.hostname in cfg else cfg['DEFAULT']
-        self.ignored_files = section['ignored_files'].split(',')
-        self.path = os.path.abspath(os.path.expanduser(section['repo_dir']))
-        if not os.path.exists(self.path):
-            self.log.error(f"No dots repository found at '{self.path}'")
-        if os.path.isdir(os.path.join(self.path, '.git')):
-            self.git_repo = Repo(self.path)
+    path: Path
+    home: Path
+    ignored: tuple[str, ...]
+    git: GitRepo | None
+    ui: UI
 
-    def rm_empty_folders(self, leaf: str):
+    @classmethod
+    def load(cls, config_path: Path, ui: UI) -> DotRepository:
+        ui.debug(f"Loading configuration from {config_path}")
+        repo_dir, ignored = _load_config(config_path)
+        if not repo_dir.is_dir():
+            raise RepoError(f"no dots repository found at {repo_dir}")
+
+        git_repo: GitRepo | None = None
+        if (repo_dir / ".git").is_dir():
+            try:
+                git_repo = GitRepo(repo_dir)
+            except GitError as e:
+                ui.warning(f"could not open git repo at {repo_dir}: {e}")
+
+        return cls(
+            path=repo_dir,
+            home=Path.home().resolve(),
+            ignored=ignored,
+            git=git_repo,
+            ui=ui,
+        )
+
+    # ------------------------------------------------------------------
+    # Public operations
+    # ------------------------------------------------------------------
+
+    def add(self, target: Path) -> None:
+        """Move ``target`` into the repository and replace it with a symlink.
+
+        Safety: the file is *copied* into the repo first, then the symlink is
+        installed atomically. If the symlink step fails the stray copy is
+        removed — the user's file is never in an unreachable state.
         """
-        Recursively (bottom-up) delete empty directories
-        :param leaf: path from which deletion should start
+        target = target.absolute()
+        self.ui.debug(f"Adding '{target}' to the repository...")
+        self._validate_addable(target)
+
+        relpath = target.relative_to(self.home)
+        repo_file = self.path / relpath
+
+        # Step 1: stage a copy in the repo. target is still intact.
+        self.ui.debug(f"Copying {target} to {repo_file}")
+        fs.atomic_copy(target, repo_file)
+
+        # Step 2: replace target with a symlink. Atomic; on failure, roll back.
+        try:
+            self.ui.debug(f"Creating symlink at {target}")
+            fs.atomic_symlink(repo_file, target)
+        except DotsError:
+            with contextlib.suppress(DotsError):
+                fs.safe_unlink(repo_file)
+            raise
+
+        # Step 3: commit to git. Non-fatal.
+        self._git_commit_safe(f"added {relpath.as_posix()}")
+        self.ui.info(f"File added: {target}")
+
+    def remove(self, target: Path) -> None:
+        """Restore a repository file to its original location and un-track it.
+
+        Safety: the repo content is copied back to the home location first (an
+        atomic ``os.replace`` that swaps the symlink for a regular file). Only
+        after that commit step is the repo copy deleted.
         """
-        if not os.listdir(leaf):
-            if not self.log.ask_yesno(f"Delete empty folder '{leaf}'?", default='y'):
-                return
-            self.log.debug(f'Deleting empty folder: {leaf}')
-            os.rmdir(leaf)
-            self.rm_empty_folders(os.path.split(leaf)[0])
+        target = target.absolute()
+        self.ui.debug(f"Removing '{target}' from the repository...")
 
-    def git_commit(self, msg: str):
-        """
-        Adds repository changes to Git and commits.
-        :param msg: commit message
-        """
-        self.git_repo.git.add(all=True)
-        self.git_repo.git.commit(message=f'[dots] {msg}')
+        repo_file = target.resolve()
+        if not fs.is_inside(repo_file, self.path):
+            raise NotInRepoError(target)
 
-    def add_file(self, target_file: str):
-        """
-        Adds a file to the repository.
-        :param target_file: path of the file to add
-        """
-        self.log.debug(f"Adding '{target_file}' to the repository...")
+        relpath = repo_file.relative_to(self.path)
+        home_file = self.home / relpath
 
-        # check if file exists
-        if not os.path.exists(target_file):
-            self.log.error(f'File not found: {target_file}')
-        if os.path.islink(target_file):
-            if os.path.realpath(target_file).startswith(self.path):
-                self.log.error(f'File is already in the repository: {target_file}')
-            else:
-                self.log.error(f'Can not add link file: {target_file}')
+        if not home_file.is_symlink():
+            raise InvalidTargetError(f"expected symlink at {home_file}", home_file)
+        if home_file.resolve() != repo_file:
+            raise InvalidTargetError(
+                f"{home_file} does not point to {repo_file}", home_file
+            )
 
-        # check if file is in a subfolder of the home directory
-        if not target_file.startswith(HOME):
-            self.log.error(f'File is not in a subfolder of {HOME}')
-        if target_file.startswith(self.path):
-            self.log.error("Files inside the repository can't be added")
+        # Step 1: install a regular-file copy at home_file (atomically replaces the symlink).
+        self.ui.debug(f"Restoring {repo_file} to {home_file}")
+        fs.atomic_copy(repo_file, home_file)
 
-        # generate paths
-        file_relpath = os.path.relpath(target_file, HOME)
-        file_name = os.path.basename(target_file)
-        repo_subdirs = os.path.split(file_relpath)[0].split(os.path.sep)
-        repo_dir = os.path.join(self.path, *repo_subdirs)
-        repo_file = os.path.join(repo_dir, file_name)
+        # Step 2: drop the repo-side copy.
+        self.ui.debug(f"Removing repo file {repo_file}")
+        fs.safe_unlink(repo_file)
 
-        # move file into the repository and create symlink
-        if not os.path.exists(repo_dir):
-            self.log.debug(f'Creating folder: {repo_dir}')
-            os.makedirs(repo_dir)
-        self.log.debug('Moving {} to {}'.format(target_file, repo_file))
-        shutil.move(target_file, repo_file)
-        self.log.debug('Creating symlink')
-        os.symlink(repo_file, target_file)
+        # Step 3: clean empty parent dirs in the repo.
+        self._rm_empty_folders(repo_file.parent)
 
-        if self.git_repo is not None:
-            self.log.debug('Adding new file to Git')
-            self.git_repo.index.add(file_relpath)
-            self.git_repo.index.commit(f'[dots] added {file_relpath}')
-        self.log.info(f'File added: {target_file}')
+        # Step 4: commit.
+        self._git_commit_safe(f"removed {relpath.as_posix()}")
+        self.ui.info(f"File removed: {target}")
 
-    def cmd_list(self, args: Namespace):
-        """
-        Lists repository content.
-        :param args: command-line arguments
-        """
-        self.log.debug('Listing repository content...')
-        # TODO: show files as a tree
-        self.cmd_sync(args, list_only=True)
-
-    def cmd_add(self, args: Namespace):
-        """
-        Adds a new file to the repository.
-        :param args: command-line arguments
-        """
-        self.add_file(args.file)
-
-    def cmd_remove(self, args: Namespace):
-        """
-        Removes a file from the repository.
-        :param args: command-line arguments
-        """
-        self.log.debug(f"Removing '{args.file}' from the repository...")
-
-        # check if file is inside the repository and if original file is indeed a symlink
-        file_path = os.path.realpath(args.file)
-        if not file_path.startswith(self.path):
-            self.log.error(f'Not a repository file: {args.file}')
-        orig_path = file_path.replace(self.path, HOME)
-        if not os.path.islink(orig_path):
-            self.log.error(f'Original file path is not a symlink: {orig_path}')
-
-        # move file to its original location
-        self.log.debug(f'Deleting symlink: {orig_path}')
-        os.unlink(orig_path)
-        self.log.debug('Moving file to its original location')
-        shutil.move(file_path, orig_path)
-
-        # check for empty dirs to remove
-        self.rm_empty_folders(os.path.split(file_path)[0])
-        if self.git_repo is not None:
-            self.log.debug('Removing file from Git')
-            repo_path = os.path.relpath(file_path, self.path)
-            self.git_repo.index.remove(repo_path)
-            self.git_repo.index.commit(f'[dots] removed {repo_path}')
-        self.log.info(f'File removed: {args.file}')
-
-    def cmd_sync(self, args: Namespace, list_only: bool=False):
-        """
-        Synchronizes repository content (adds missing symlinks and warns about conflicts).
-        :param args: command-line arguments
-        :param list_only: only list repository content (do not fix unsynced files)
-        """
-        def force_add(fpath: str, lpath: str):
-            self.log.debug(f'Deleting existing repository file: {fpath}')
-            os.unlink(fpath)
-            self.add_file(lpath)
-        def force_link(fpath: str, lpath: str):
-            self.log.debug(f'Deleting local file: {lpath}')
-            os.unlink(lpath)
-            os.symlink(fpath, lpath)
-            self.log.info(f'Replaced local file: {lpath}')
-
+    def sync(
+        self,
+        *,
+        list_only: bool = False,
+        force_relink: bool = False,
+        force_add: bool = False,
+        force_link: bool = False,
+    ) -> None:
+        """Reconcile every repo file against its expected symlink under ``home``."""
         if not list_only:
-            self.log.debug('Synchronizing repository files...')
-        for curdir, dirs, files in os.walk(self.path):
-            if '.git' in dirs:
-                dirs.remove('.git')
-            for file_name in files:
-                ignore_file = False
-                repo_path = os.path.join(curdir, file_name).replace(self.path, '')
-                for ignored in self.ignored_files:
-                    if ignored.startswith('/'):
-                        file_name = os.path.join(repo_path, file_name)
-                    if fnmatch(file_name, ignored):
-                        self.log.debug('Ignored file ({}): {}'.format(ignored, repo_path[1:]))
-                        ignore_file = True
-                        break
-                if ignore_file:
-                    continue
-                file_path = os.path.join(curdir, file_name)
-                link_path = file_path.replace(self.path, HOME)
-                if not os.path.exists(link_path) and not os.path.islink(link_path):
-                    if not list_only:
-                        linkdir = os.path.dirname(link_path)
-                        if not os.path.exists(linkdir):
-                            os.makedirs(linkdir)
-                        os.symlink(file_path, link_path)
-                        self.log.info(f'Installed: {link_path}')
-                    else:
-                        self.log.notice(f'Missing: {link_path}')
-                else:
-                    if os.path.islink(link_path):
-                        # target path already exists
-                        link_target = os.path.realpath(link_path)
-                        if link_target != file_path:
-                            link_state = 'valid' if os.path.exists(link_target) else 'broken'
-                            self.log.warning(f'Conflict ({link_state} link): {link_path} -> {link_target}')
-                            if not list_only:
-                                if not args.force_relink:
-                                    if not self.log.ask_yesno('Overwrite existing link?', default='n'):
-                                        continue
-                                os.unlink(link_path)
-                                os.symlink(file_path, link_path)
-                                self.log.info(f'Replaced link: {link_path}')
-                        else:
-                            self.log.info(f'OK: {link_path}')
-                    else:
-                        # target path is a regular file
-                        self.log.warning(f'Conflict (file exists): {link_path}')
-                        if not list_only:
-                            if args.force_add:
-                                force_add(file_path, link_path)
-                            elif args.force_link:
-                                force_link(file_path, link_path)
-                            else:
-                                if self.log.ask_yesno('Replace repository file?', default='n'):
-                                    force_add(file_path, link_path)
-                                    continue
-                                if self.log.ask_yesno('Replace local file?', default='n'):
-                                    force_link(file_path, link_path)
-                                    continue
+            self.ui.debug("Synchronizing repository files...")
+
+        for repo_file in self._iter_repo_files():
+            relpath = repo_file.relative_to(self.path)
+            if self._is_ignored(relpath):
+                self.ui.debug(f"Ignored: {relpath.as_posix()}")
+                continue
+
+            link_path = self.home / relpath
+            self._sync_one(
+                repo_file=repo_file,
+                link_path=link_path,
+                list_only=list_only,
+                force_relink=force_relink,
+                force_add=force_add,
+                force_link=force_link,
+            )
+
+    # ------------------------------------------------------------------
+    # Internals
+    # ------------------------------------------------------------------
+
+    def _validate_addable(self, target: Path) -> None:
+        if target.is_symlink():
+            if fs.is_inside(target.resolve(), self.path):
+                raise AlreadyInRepoError(target)
+            raise InvalidTargetError(f"cannot add a symlink: {target}", target)
+        if not target.exists():
+            raise InvalidTargetError(f"file not found: {target}", target)
+        if not target.is_file():
+            raise InvalidTargetError(f"not a regular file: {target}", target)
+        if not fs.is_inside(target, self.home):
+            raise NotInHomeError(target, self.home)
+        if fs.is_inside(target, self.path):
+            raise InvalidTargetError(
+                f"file is already inside the repository: {target}", target
+            )
+
+    def _iter_repo_files(self) -> Iterator[Path]:
+        """Yield every regular file under ``self.path``, skipping ``.git``."""
+        for p in sorted(self.path.rglob("*")):
+            if not p.is_file():
+                continue
+            try:
+                parts = p.relative_to(self.path).parts
+            except ValueError:
+                continue
+            if ".git" in parts:
+                continue
+            yield p
+
+    def _is_ignored(self, relpath: Path) -> bool:
+        """Match ``relpath`` (repo-relative) against the ignore patterns.
+
+        Patterns starting with ``/`` are anchored to the repo root and match
+        the full relative path. All other patterns match the filename only.
+        """
+        rel_str = "/" + relpath.as_posix()
+        for pattern in self.ignored:
+            match_target = rel_str if pattern.startswith("/") else relpath.name
+            if fnmatch.fnmatch(match_target, pattern):
+                return True
+        return False
+
+    def _sync_one(
+        self,
+        *,
+        repo_file: Path,
+        link_path: Path,
+        list_only: bool,
+        force_relink: bool,
+        force_add: bool,
+        force_link: bool,
+    ) -> None:
+        # Truly missing at the home location (not even a broken symlink)?
+        if not (link_path.is_symlink() or link_path.exists()):
+            if list_only:
+                self.ui.notice(f"Missing: {link_path}")
+                return
+            fs.atomic_symlink(repo_file, link_path)
+            self.ui.info(f"Installed: {link_path}")
+            return
+
+        if link_path.is_symlink():
+            link_target = link_path.resolve()
+            if link_target == repo_file:
+                self.ui.info(f"OK: {link_path}")
+                return
+            state = "valid" if link_target.exists() else "broken"
+            self.ui.warning(
+                f"Conflict ({state} link): {link_path} -> {link_target}"
+            )
+            if list_only:
+                return
+            if not force_relink and not self.ui.ask_yesno(
+                "Overwrite existing link?", default=False
+            ):
+                return
+            fs.atomic_symlink(repo_file, link_path)
+            self.ui.info(f"Replaced link: {link_path}")
+            return
+
+        # link_path exists as a regular file
+        self.ui.warning(f"Conflict (file exists): {link_path}")
+        if list_only:
+            return
+        if force_add:
+            self._force_add(repo_file, link_path)
+        elif force_link:
+            self._force_link(repo_file, link_path)
+        elif self.ui.ask_yesno("Replace repository file?", default=False):
+            self._force_add(repo_file, link_path)
+        elif self.ui.ask_yesno("Replace local file?", default=False):
+            self._force_link(repo_file, link_path)
+
+    def _force_add(self, repo_file: Path, link_path: Path) -> None:
+        """Promote the user's local file to become the new repo version."""
+        self.ui.debug(f"Force-add: {link_path} -> {repo_file}")
+        fs.atomic_copy(link_path, repo_file)
+        fs.atomic_symlink(repo_file, link_path)
+        self._git_commit_safe(
+            f"force-updated {repo_file.relative_to(self.path).as_posix()}"
+        )
+        self.ui.info(f"Repository file replaced: {repo_file}")
+
+    def _force_link(self, repo_file: Path, link_path: Path) -> None:
+        """Replace the user's local file with a symlink pointing at the repo."""
+        self.ui.debug(f"Force-link: {link_path} -> {repo_file}")
+        fs.atomic_symlink(repo_file, link_path)
+        self.ui.info(f"Local file replaced: {link_path}")
+
+    def _rm_empty_folders(self, leaf: Path) -> None:
+        """Iteratively delete empty directories up to ``self.path`` (exclusive)."""
+        while leaf != self.path and fs.is_inside(leaf, self.path):
+            try:
+                if any(leaf.iterdir()):
+                    return
+            except OSError:
+                return
+            if not self.ui.ask_yesno(
+                f"Delete empty folder '{leaf}'?", default=True
+            ):
+                return
+            self.ui.debug(f"Deleting empty folder: {leaf}")
+            try:
+                leaf.rmdir()
+            except OSError as e:
+                self.ui.warning(f"Failed to delete {leaf}: {e}")
+                return
+            leaf = leaf.parent
+
+    def _git_commit_safe(self, msg: str) -> None:
+        """Commit all repo changes — non-fatal on failure (closes H8)."""
+        if self.git is None:
+            return
+        try:
+            self.git.git.add(all=True)
+            self.git.git.commit(message=f"[dots] {msg}")
+        except GitError as e:
+            self.ui.warning(
+                f"git commit failed (filesystem change was applied): {e}"
+            )

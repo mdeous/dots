@@ -1,103 +1,149 @@
-# coding: utf-8
+from __future__ import annotations
 
-from argparse import ArgumentParser, ArgumentDefaultsHelpFormatter, Namespace
-from configparser import ConfigParser
-import os.path
+import sys
+from pathlib import Path
+from typing import Annotated
+
+import typer
 
 from dots import VERSION
+from dots.errors import DotsError
 from dots.repo import DotRepository
+from dots.ui import UI
+
+app = typer.Typer(
+    name="dots",
+    help="Configuration files management tool.",
+    no_args_is_help=True,
+    add_completion=False,
+    pretty_exceptions_show_locals=False,
+)
 
 
-def parse_args() -> Namespace:
-    parser = ArgumentParser(
-        description='Configuration files management tool.',
-        formatter_class=ArgumentDefaultsHelpFormatter
-    )
-    parser.add_argument(
-        '-c', '--config',
-        help='configuration file',
-        default='~/.dots.conf'
-    )
-    parser.add_argument(
-        '-V', '--version',
-        help='display program version and exit',
-        action='store_true'
-    )
-    parser.add_argument(
-        '-v', '--verbose',
-        help='display debug information',
-        action='store_true'
-    )
-    subparsers = parser.add_subparsers(help='command help')
-
-    parser_add = subparsers.add_parser('add', help='add file to the repository')
-    parser_add.set_defaults(func='add')
-    parser_add.add_argument(
-        'file',
-        help='path of the file to add'
-    )
-
-    parser_rm = subparsers.add_parser(
-        'remove',
-        help='remove file from the repository',
-        aliases=['r', 'rm']
-    )
-    parser_rm.set_defaults(func='remove')
-    parser_rm.add_argument(
-        'file',
-        help='path of the file to remove'
-    )
-
-    parser_list = subparsers.add_parser(
-        'list',
-        help='list repository content',
-        aliases=['l', 'ls']
-    )
-    parser_list.set_defaults(func='list')
-
-    parser_sync = subparsers.add_parser('sync', help='synchronize config and repo files')
-    parser_sync.set_defaults(func='sync')
-    parser_sync.add_argument(
-        '-r', '--force-relink',
-        help='if a link points to another file, overwrite it without asking',
-        action='store_true'
-    )
-    parser_file_exists = parser_sync.add_mutually_exclusive_group()
-    parser_file_exists.add_argument(
-        '-a', '--force-add',
-        help='if a file already exists, overwrite the repository version without asking',
-        action='store_true'
-    )
-    parser_file_exists.add_argument(
-        '-l', '--force-link',
-        help='If a file already exists, overwrite the local version without asking',
-        action='store_true'
-    )
-
-    args = parser.parse_args()
-    if args.version:
-        print(f'dots {VERSION}')
-        exit(0)
-    if not hasattr(args, 'func'):
-        # show help if no command was provided
-        parser.print_help()
-        exit(1)
-    if hasattr(args, 'file'):
-        args.file = os.path.abspath(os.path.expanduser(args.file))
-    return args
+def _version_callback(value: bool) -> None:
+    if value:
+        typer.echo(f"dots {VERSION}")
+        raise typer.Exit
 
 
-def main():
-    args = parse_args()
-    cfg = ConfigParser(defaults={
-        'repo_dir': '~/dots',
-        'ignored_files': ''
-    })
-    cfg.read(args.config)
-    repo = DotRepository(cfg, verbose=args.verbose)
-    method_name = f'cmd_{args.func}'
-    method_obj = getattr(repo, method_name)
-    method_obj(args)
+def _config_callback(value: Path) -> Path:
+    return value.expanduser()
+
+
+def _load(ctx: typer.Context) -> DotRepository:
+    state: _State = ctx.obj
+    return DotRepository.load(state.config, state.ui)
+
+
+class _State:
+    def __init__(self, config: Path, verbose: bool) -> None:
+        self.config = config
+        self.verbose = verbose
+        self.ui = UI(verbose=verbose)
+
+
+@app.callback()
+def app_main(
+    ctx: typer.Context,
+    config: Annotated[
+        Path,
+        typer.Option(
+            "--config",
+            "-c",
+            help="configuration file",
+            callback=_config_callback,
+        ),
+    ] = Path("~/.dots.conf"),
+    verbose: Annotated[
+        bool,
+        typer.Option("--verbose", "-v", help="display debug information"),
+    ] = False,
+    version: Annotated[
+        bool,
+        typer.Option(
+            "--version",
+            "-V",
+            help="display program version and exit",
+            callback=_version_callback,
+            is_eager=True,
+        ),
+    ] = False,
+) -> None:
+    _ = version  # consumed by _version_callback; silence unused-parameter checks
+    ctx.obj = _State(config=config, verbose=verbose)
+
+
+@app.command("add")
+def cmd_add(
+    ctx: typer.Context,
+    file: Annotated[Path, typer.Argument(help="path of the file to add")],
+) -> None:
+    """Add a file to the repository."""
+    _load(ctx).add(file)
+
+
+@app.command("remove")
+def cmd_remove(
+    ctx: typer.Context,
+    file: Annotated[Path, typer.Argument(help="path of the file to remove")],
+) -> None:
+    """Remove a file from the repository."""
+    _load(ctx).remove(file)
+
+
+@app.command("list")
+def cmd_list(ctx: typer.Context) -> None:
+    """List repository contents."""
+    _load(ctx).sync(list_only=True)
+
+
+@app.command("sync")
+def cmd_sync(
+    ctx: typer.Context,
+    force_relink: Annotated[
+        bool,
+        typer.Option(
+            "--force-relink",
+            "-r",
+            help="if a link points to another file, overwrite without asking",
+        ),
+    ] = False,
+    force_add: Annotated[
+        bool,
+        typer.Option(
+            "--force-add",
+            "-a",
+            help="if a file already exists, overwrite the repository version",
+        ),
+    ] = False,
+    force_link: Annotated[
+        bool,
+        typer.Option(
+            "--force-link",
+            "-l",
+            help="if a file already exists, overwrite the local version",
+        ),
+    ] = False,
+) -> None:
+    """Synchronize repository content with the filesystem."""
+    if force_add and force_link:
+        raise typer.BadParameter(
+            "--force-add and --force-link are mutually exclusive"
+        )
+    _load(ctx).sync(
+        force_relink=force_relink,
+        force_add=force_add,
+        force_link=force_link,
+    )
+
+
+def main() -> None:
+    """Script entry point. Wraps ``app`` so ``DotsError`` produces clean output."""
+    try:
+        app()
+    except DotsError as e:
+        typer.secho(f"error: {e}", fg=typer.colors.RED, bold=True, err=True)
+        sys.exit(1)
 
 
 if __name__ == "__main__":
