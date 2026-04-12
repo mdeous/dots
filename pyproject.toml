@@ -1,5 +1,5 @@
 [project]
-name = "dots"
+name = "dotsman"
 version = "0.1.0"
 description = "Configuration files management tool"
 readme = "README.md"
