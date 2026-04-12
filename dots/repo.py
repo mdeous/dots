@@ -151,9 +151,7 @@ class DotRepository:
         if not home_file.is_symlink():
             raise InvalidTargetError(f"expected symlink at {home_file}", home_file)
         if home_file.resolve() != repo_file:
-            raise InvalidTargetError(
-                f"{home_file} does not point to {repo_file}", home_file
-            )
+            raise InvalidTargetError(f"{home_file} does not point to {repo_file}", home_file)
 
         # install a regular-file copy at home_file (atomically replaces the symlink)
         self.ui.debug(f"Restoring {repo_file} to {home_file}")
@@ -220,9 +218,7 @@ class DotRepository:
         if not fs.is_inside(target, self.home):
             raise NotInHomeError(target, self.home)
         if fs.is_inside(target, self.path):
-            raise InvalidTargetError(
-                f"file is already inside the repository: {target}", target
-            )
+            raise InvalidTargetError(f"file is already inside the repository: {target}", target)
 
     def iter_repo_files(self) -> Iterator[Path]:
         """
@@ -277,9 +273,7 @@ class DotRepository:
             self.ui.conflict(link_path, target=link_target, reason=f"{state} link")
             if list_only:
                 return SyncOutcome.CONFLICT
-            if not force_relink and not self.ui.ask_yesno(
-                "Overwrite existing link?", default=False
-            ):
+            if not force_relink and not self.ui.ask_yesno("Overwrite existing link?", default=False):
                 return SyncOutcome.SKIPPED
             fs.atomic_symlink(repo_file, link_path)
             self.ui.replaced(link_path)
@@ -309,9 +303,7 @@ class DotRepository:
         self.ui.debug(f"Force-add: {link_path} -> {repo_file}")
         fs.atomic_copy(link_path, repo_file)
         fs.atomic_symlink(repo_file, link_path)
-        self.git_commit_safe(
-            f"force-updated {repo_file.relative_to(self.path).as_posix()}"
-        )
+        self.git_commit_safe(f"force-updated {repo_file.relative_to(self.path).as_posix()}")
         self.ui.replaced(repo_file)
 
     def force_link(self, repo_file: Path, link_path: Path) -> None:
@@ -332,9 +324,7 @@ class DotRepository:
                     return
             except OSError:
                 return
-            if not self.ui.ask_yesno(
-                f"Delete empty folder '{leaf}'?", default=True
-            ):
+            if not self.ui.ask_yesno(f"Delete empty folder '{leaf}'?", default=True):
                 return
             self.ui.debug(f"Deleting empty folder: {leaf}")
             try:
@@ -354,6 +344,4 @@ class DotRepository:
             self.git.git.add(all=True)
             self.git.git.commit(message=f"[dots] {msg}")
         except GitError as e:
-            self.ui.warning(
-                f"git commit failed (filesystem change was applied): {e}"
-            )
+            self.ui.warning(f"git commit failed (filesystem change was applied): {e}")

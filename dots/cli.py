@@ -135,9 +135,7 @@ def cmd_sync(
     Synchronize repository content with the filesystem.
     """
     if force_add and force_link:
-        raise typer.BadParameter(
-            "--force-add and --force-link are mutually exclusive"
-        )
+        raise typer.BadParameter("--force-add and --force-link are mutually exclusive")
     load_repo(ctx).sync(
         force_relink=force_relink,
         force_add=force_add,

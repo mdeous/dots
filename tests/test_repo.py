@@ -85,9 +85,7 @@ class TestAdd:
 
         assert (fake_repo / "a" / "b" / "c" / "file.txt").read_text() == "deep"
 
-    def test_rollback_on_symlink_failure(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_rollback_on_symlink_failure(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         target = fake_home / "important.conf"
         target.write_text("precious data")
 
@@ -112,9 +110,7 @@ class TestRemove:
         return home_file, repo_file
 
     def test_restores_file(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
-        home_file, repo_file = self._setup_tracked_file(
-            fake_home, fake_repo, ".config/app.conf", content="restored"
-        )
+        home_file, repo_file = self._setup_tracked_file(fake_home, fake_repo, ".config/app.conf", content="restored")
 
         dot_repo.remove(home_file)
 
@@ -130,9 +126,7 @@ class TestRemove:
         with pytest.raises(NotInRepoError):
             dot_repo.remove(home_file)
 
-    def test_not_a_symlink_at_home_raises(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_not_a_symlink_at_home_raises(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "file.txt"
         repo_file.write_text("data")
         home_file = fake_home / "file.txt"
@@ -141,9 +135,7 @@ class TestRemove:
         with pytest.raises(InvalidTargetError, match="expected symlink"):
             dot_repo.remove(repo_file)
 
-    def test_wrong_symlink_target_raises(
-        self, dot_repo: DotRepository, fake_home: Path, tmp_path: Path
-    ) -> None:
+    def test_wrong_symlink_target_raises(self, dot_repo: DotRepository, fake_home: Path, tmp_path: Path) -> None:
         outside = tmp_path / "elsewhere.txt"
         outside.write_text("data")
         link = fake_home / "link.txt"
@@ -152,9 +144,7 @@ class TestRemove:
         with pytest.raises(NotInRepoError):
             dot_repo.remove(link)
 
-    def test_cleans_empty_parent_dirs(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_cleans_empty_parent_dirs(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         home_file, _ = self._setup_tracked_file(fake_home, fake_repo, "a/b/file.txt")
 
         dot_repo.remove(home_file)
@@ -162,9 +152,7 @@ class TestRemove:
         assert not (fake_repo / "a" / "b").exists()
         assert not (fake_repo / "a").exists()
 
-    def test_preserves_nonempty_parent_dirs(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_preserves_nonempty_parent_dirs(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         home_file, _ = self._setup_tracked_file(fake_home, fake_repo, "a/b/file.txt")
         (fake_repo / "a" / "other.txt").write_text("keep me")
 
@@ -176,9 +164,7 @@ class TestRemove:
 
 
 class TestSync:
-    def test_creates_missing_symlinks(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_creates_missing_symlinks(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "bashrc"
         repo_file.write_text("alias ls='ls --color'")
 
@@ -188,9 +174,7 @@ class TestSync:
         assert link.is_symlink()
         assert link.resolve() == repo_file.resolve()
 
-    def test_correct_symlink_unchanged(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_correct_symlink_unchanged(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "bashrc"
         repo_file.write_text("data")
         link = fake_home / "bashrc"
@@ -215,9 +199,7 @@ class TestSync:
 
         assert link.resolve() == repo_file.resolve()
 
-    def test_conflict_force_add(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_conflict_force_add(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "bashrc"
         repo_file.write_text("old repo content")
         local_file = fake_home / "bashrc"
@@ -228,9 +210,7 @@ class TestSync:
         assert repo_file.read_text() == "local version"
         assert local_file.is_symlink()
 
-    def test_conflict_force_link(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_conflict_force_link(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "bashrc"
         repo_file.write_text("repo version")
         local_file = fake_home / "bashrc"
@@ -241,9 +221,7 @@ class TestSync:
         assert local_file.is_symlink()
         assert local_file.read_text() == "repo version"
 
-    def test_list_only_no_modification(
-        self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path
-    ) -> None:
+    def test_list_only_no_modification(self, dot_repo: DotRepository, fake_home: Path, fake_repo: Path) -> None:
         repo_file = fake_repo / "bashrc"
         repo_file.write_text("data")
 
@@ -251,9 +229,7 @@ class TestSync:
 
         assert not (fake_home / "bashrc").exists()
 
-    def test_skips_ignored_files(
-        self, fake_home: Path, fake_repo: Path, stub_ui: StubUI
-    ) -> None:
+    def test_skips_ignored_files(self, fake_home: Path, fake_repo: Path, stub_ui: StubUI) -> None:
         repo = DotRepository(
             path=fake_repo,
             home=fake_home,
