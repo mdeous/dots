@@ -22,20 +22,16 @@ Yet another dotfiles management tool.
 
 ## :package: Installation
 
-Clone the repository and install with [uv](https://docs.astral.sh/uv/):
+Install with [uv](https://docs.astral.sh/uv/):
 
 ```bash
-git clone https://github.com/mdeous/dots.git
-cd dots
-uv sync
+uv tool install dotsman
 ```
 
-Or with pip:
+To update to the latest version:
 
 ```bash
-git clone https://github.com/mdeous/dots.git
-cd dots
-pip install .
+uv tool upgrade dotsman
 ```
 
 ## :gear: Configuration
