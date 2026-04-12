@@ -1,7 +1,7 @@
 [project]
 name = "dotsman"
-version = "1.0.0"
-description = "Configuration files management tool"
+version = "1.1.0"
+description = "Yet another dotfiles management tool"
 readme = "README.md"
 license = "BSD-3-Clause"
 authors = [
