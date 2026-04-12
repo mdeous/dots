@@ -17,6 +17,7 @@ app = typer.Typer(
     no_args_is_help=True,
     add_completion=False,
     pretty_exceptions_show_locals=False,
+    context_settings={"help_option_names": ["-h", "--help"]},
 )
 
 
@@ -145,6 +146,17 @@ def cmd_sync(
         force_add=force_add,
         force_link=force_link,
     )
+
+
+# Command aliases (hidden so they don't clutter --help)
+app.command("a", hidden=True)(cmd_add)
+app.command("rm", hidden=True)(cmd_remove)
+app.command("rem", hidden=True)(cmd_remove)
+app.command("del", hidden=True)(cmd_remove)
+app.command("delete", hidden=True)(cmd_remove)
+app.command("l", hidden=True)(cmd_list)
+app.command("ls", hidden=True)(cmd_list)
+app.command("s", hidden=True)(cmd_sync)
 
 
 def main() -> None:
