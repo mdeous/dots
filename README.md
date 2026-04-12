@@ -1,54 +1,120 @@
 # dots
 
-`dots` is yet another dotfiles management tool.
+Yet another dotfiles management tool.
 
-TODO: badges, plenty of them!
+## :sparkles: Features
 
-## Features
+- :link: Dotfiles stored in a central folder and symlinked to their real location
+- :repeat: Automatic git versioning on every change
+- :computer: Per-machine configuration via hostname-based config sections
+- :warning: Conflict detection and resolution during sync
 
-- dotfiles stored in a central folder and symlinked by `dots` to their real location
-- handles versioning, Git knowledge should not be required to use `dots`
-- can store multiple machines configuration (one branch per machine, named after its hostname)
-- private files (SSH keys, configuration files containing credentials, etc.) can be stored encrypted
+## :clipboard: Requirements
 
-## Dependencies
+- Python 3.12+
+- git
 
-TODO
+## :package: Installation
 
-## Installation
+Clone the repository and install with [uv](https://docs.astral.sh/uv/):
 
-TODO
+```bash
+git clone https://github.com/mdeous/dots.git
+cd dots
+uv sync
+```
 
-## Configuration
+Or with pip:
 
-The `dots` configuration file should be located at `${HOME}/.dots.conf`, and is organized in sections
-in the same way as a `.ini` file. The configuration file can handle settings for multiple machines, so
-that it also can be synced (by default, `dots` automatically adds its configuration when the repo is
-initialized).
+```bash
+git clone https://github.com/mdeous/dots.git
+cd dots
+pip install .
+```
 
-The global section is `DEFAULT` (case-sensitive), which holds default values that can be overriden for in
-the other sections. Each machine settings are stored in a separate section named after the machine hostname.
+## :gear: Configuration
 
-The values that can be used in each sections are :
+The configuration file should be located at `~/.dots.conf`.
 
-- `repo_dir` : custom repository path (default: `~/dots`)
-- `gpg_key_id` : ID of the GPG key to use for file encryption (default: none)
-- `ignored_files` : comma-separated list of files that should'nt be synced
+Settings are organized in sections named after the machine's hostname. The `[DEFAULT]` section provides fallback values used when no hostname-specific section exists.
 
-An example configuration can be found in the `sample-config.conf` file located in the same folder as this
-README.
+### Available settings
 
-## Usage
+| Key             | Description                                               | Default  |
+| --------------- | --------------------------------------------------------- | -------- |
+| `repo_dir`      | Path to the dotfiles repository                           | `~/dots` |
+| `gpg_key_id`    | GPG key ID for file encryption                            | _none_   |
+| `ignored_files` | Comma-separated list of glob patterns to skip during sync | _none_   |
 
-TODO
+### Example
 
-## Files layout
+```ini
+[DEFAULT]
+repo_dir = ~/dots
 
-- `dots` configuration file is `${HOME}/.dots.conf`
-- dotfiles are stored in `${HOME}/dots/files`
-- encrypted files are stored in `${HOME}/dots/encrypted`
-- decrypted files (symlink targets) are not versioned and are stored in `${HOME}/dots/decrypted`
+[work-laptop]
+repo_dir = ~/dotfiles
+ignored_files = .bashrc, .config/personal/*
 
-## License
+[home-desktop]
+gpg_key_id = ABCDEF1234567890
+```
 
-This project is licensed under the BSD 3-clause license.
+## :rocket: Usage
+
+### Global options
+
+```text
+dots [--config PATH] [--verbose] [--version] COMMAND
+```
+
+| Option      | Short | Description                                   |
+| ----------- | ----- | --------------------------------------------- |
+| `--config`  | `-c`  | Path to config file (default: `~/.dots.conf`) |
+| `--verbose` | `-v`  | Display debug information                     |
+| `--version` | `-V`  | Display version and exit                      |
+
+### `dots add <file>`
+
+Add a file to the repository. The file is copied into the repo and replaced with a symlink.
+
+```bash
+dots add ~/.bashrc
+dots add ~/.config/git/config
+```
+
+### `dots remove <file>`
+
+Remove a file from the repository. The symlink is replaced with the original file.
+
+```bash
+dots remove ~/.bashrc
+```
+
+### `dots list`
+
+List all files in the repository and their sync status.
+
+```bash
+dots list
+```
+
+### `dots sync`
+
+Synchronize the repository with the filesystem. Creates missing symlinks and detects conflicts.
+
+```bash
+dots sync
+```
+
+| Option           | Short | Description                                    |
+| ---------------- | ----- | ---------------------------------------------- |
+| `--force-relink` | `-r`  | Overwrite links that point to the wrong target |
+| `--force-add`    | `-a`  | Overwrite the repo version with the local file |
+| `--force-link`   | `-l`  | Overwrite the local file with the repo version |
+
+`--force-add` and `--force-link` are mutually exclusive. Without force flags, `dots` prompts interactively when conflicts are found.
+
+## :scroll: License
+
+BSD 3-Clause. See [LICENSE](LICENSE) for details.
