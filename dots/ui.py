@@ -29,6 +29,13 @@ def make_console(*, stderr: bool) -> Console:
     return Console(theme=THEME, stderr=stderr, highlight=False)
 
 
+def _tags(*labels: str) -> str:
+    active = [label for label in labels if label]
+    if not active:
+        return ""
+    return f" [meta]({', '.join(active)})[/]"
+
+
 @dataclass
 class UI:
     verbose: bool = False
@@ -55,32 +62,38 @@ class UI:
 
     # semantic helpers
 
-    def ok(self, path: Path, *, encrypted: bool = False) -> None:
-        tag = " [meta](encrypted)[/]" if encrypted else ""
-        self.out.print(f"  [ok]✓[/] {escape(str(path))}{tag}")
+    def ok(self, path: Path, *, encrypted: bool = False, dirty: bool = False) -> None:
+        suffix = _tags("encrypted" if encrypted else "", "uncommitted" if dirty else "")
+        self.out.print(f"  [ok]✓[/] {escape(str(path))}{suffix}")
 
-    def installed(self, path: Path, *, encrypted: bool = False) -> None:
-        tag = " [meta](encrypted)[/]" if encrypted else ""
-        self.out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]{tag}")
+    def installed(self, path: Path, *, encrypted: bool = False, dirty: bool = False) -> None:
+        suffix = _tags("encrypted" if encrypted else "", "uncommitted" if dirty else "")
+        self.out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]{suffix}")
 
-    def replaced(self, path: Path, *, encrypted: bool = False) -> None:
-        tag = " [meta](encrypted)[/]" if encrypted else ""
-        self.out.print(f"  [replace]↻[/] {escape(str(path))}{tag}")
+    def replaced(self, path: Path, *, encrypted: bool = False, dirty: bool = False) -> None:
+        suffix = _tags("encrypted" if encrypted else "", "uncommitted" if dirty else "")
+        self.out.print(f"  [replace]↻[/] {escape(str(path))}{suffix}")
 
-    def missing(self, path: Path, *, encrypted: bool = False) -> None:
-        extra = ", encrypted" if encrypted else ""
-        self.out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing{extra})[/]")
+    def missing(self, path: Path, *, encrypted: bool = False, dirty: bool = False) -> None:
+        suffix = _tags("missing", "encrypted" if encrypted else "", "uncommitted" if dirty else "")
+        self.out.print(f"  [missing]✗[/] {escape(str(path))}{suffix}")
 
-    def removed(self, path: Path, *, encrypted: bool = False) -> None:
-        tag = " [meta](encrypted)[/]" if encrypted else ""
-        self.out.print(f"  [missing]-[/] {escape(str(path))}{tag}")
+    def committed(self, path: Path) -> None:
+        self.out.print(f"  [ok]↑[/] {escape(str(path))} [meta](committed)[/]")
 
-    def conflict(self, path: Path, *, target: Path | None = None, reason: str = "") -> None:
+    def removed(self, path: Path, *, encrypted: bool = False, dirty: bool = False) -> None:
+        suffix = _tags("encrypted" if encrypted else "", "uncommitted" if dirty else "")
+        self.out.print(f"  [missing]-[/] {escape(str(path))}{suffix}")
+
+    def conflict(self, path: Path, *, target: Path | None = None, reason: str = "", dirty: bool = False) -> None:
         parts = [f"  [conflict]![/] {escape(str(path))}"]
         if target is not None:
             parts.append(f" [arrow]→[/] [meta]{escape(str(target))}[/]")
-        if reason:
-            parts.append(f" [meta]({escape(reason)})[/]")
+        reason_parts = [reason] if reason else []
+        if dirty:
+            reason_parts.append("uncommitted")
+        if reason_parts:
+            parts.append(f" [meta]({escape(', '.join(reason_parts))})[/]")
         self.err.print("".join(parts))
 
     # formatting helpers

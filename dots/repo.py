@@ -279,6 +279,7 @@ class DotRepository:
 
         changed = 0
         unchanged = 0
+        dirty = self._dirty_relpaths()
 
         for repo_file in self.iter_repo_files():
             relpath = repo_file.relative_to(self.path)
@@ -286,10 +287,14 @@ class DotRepository:
                 self.ui.debug(f"Ignored: {relpath.as_posix()}")
                 continue
 
+            is_dirty = relpath.as_posix() in dirty
+            show_dirty = is_dirty and list_only
+
             if crypto.is_age_file(repo_file):
                 outcome = self.sync_one_encrypted(
                     repo_file=repo_file,
                     list_only=list_only,
+                    dirty=show_dirty,
                 )
             else:
                 link_path = self.home / relpath
@@ -300,7 +305,12 @@ class DotRepository:
                     force_relink=force_relink,
                     force_add=force_add,
                     force_link=force_link,
+                    dirty=show_dirty,
                 )
+
+            if not list_only and is_dirty and self._git_commit_path(relpath.as_posix(), f"sync {relpath.as_posix()}"):
+                self.ui.committed(relpath)
+
             if outcome == SyncOutcome.OK:
                 unchanged += 1
             elif outcome in (SyncOutcome.INSTALLED, SyncOutcome.REPLACED):
@@ -360,31 +370,32 @@ class DotRepository:
         force_relink: bool,
         force_add: bool,
         force_link: bool,
+        dirty: bool = False,
     ) -> SyncOutcome:
         if not (link_path.is_symlink() or link_path.exists()):
             if list_only:
-                self.ui.missing(link_path)
+                self.ui.missing(link_path, dirty=dirty)
                 return SyncOutcome.MISSING
             fs.atomic_symlink(repo_file, link_path)
-            self.ui.installed(link_path)
+            self.ui.installed(link_path, dirty=dirty)
             return SyncOutcome.INSTALLED
 
         if link_path.is_symlink():
             link_target = link_path.resolve()
             if link_target == repo_file:
-                self.ui.ok(link_path)
+                self.ui.ok(link_path, dirty=dirty)
                 return SyncOutcome.OK
             state = "valid" if link_target.exists() else "broken"
-            self.ui.conflict(link_path, target=link_target, reason=f"{state} link")
+            self.ui.conflict(link_path, target=link_target, reason=f"{state} link", dirty=dirty)
             if list_only:
                 return SyncOutcome.CONFLICT
             if not force_relink and not self.ui.ask_yesno("Overwrite existing link?", default=False):
                 return SyncOutcome.SKIPPED
             fs.atomic_symlink(repo_file, link_path)
-            self.ui.replaced(link_path)
+            self.ui.replaced(link_path, dirty=dirty)
             return SyncOutcome.REPLACED
 
-        self.ui.conflict(link_path, reason="file exists")
+        self.ui.conflict(link_path, reason="file exists", dirty=dirty)
         if list_only:
             return SyncOutcome.CONFLICT
         if force_add:
@@ -424,6 +435,7 @@ class DotRepository:
         *,
         repo_file: Path,
         list_only: bool,
+        dirty: bool = False,
     ) -> SyncOutcome:
         if self.age_keypair is None:
             self.ui.warning(f"skipping encrypted file (no age key): {repo_file.name}")
@@ -434,14 +446,14 @@ class DotRepository:
 
         if not decrypted_path.exists():
             if list_only:
-                self.ui.missing(home_path, encrypted=True)
+                self.ui.missing(home_path, encrypted=True, dirty=dirty)
                 return SyncOutcome.MISSING
             ciphertext = repo_file.read_bytes()
             plaintext = crypto.age_decrypt(ciphertext, self.age_keypair.identity)
             fs.atomic_write(decrypted_path, plaintext)
             self.ensure_decrypted_gitignored()
             fs.atomic_symlink(decrypted_path, home_path)
-            self.ui.installed(home_path, encrypted=True)
+            self.ui.installed(home_path, encrypted=True, dirty=dirty)
             return SyncOutcome.INSTALLED
 
         if not list_only:
@@ -455,21 +467,21 @@ class DotRepository:
                 fs.atomic_write(repo_file, new_ciphertext)
                 relpath = repo_file.relative_to(self.path)
                 self.git_commit_safe(f"re-encrypted {relpath.as_posix()}")
-                self.ui.replaced(home_path, encrypted=True)
+                self.ui.replaced(home_path, encrypted=True, dirty=dirty)
                 return SyncOutcome.REPLACED
 
         # ensure symlink is correct
         if home_path.is_symlink() and home_path.resolve() == decrypted_path.resolve():
-            self.ui.ok(home_path, encrypted=True)
+            self.ui.ok(home_path, encrypted=True, dirty=dirty)
             return SyncOutcome.OK
 
         if list_only:
-            self.ui.missing(home_path, encrypted=True)
+            self.ui.missing(home_path, encrypted=True, dirty=dirty)
             return SyncOutcome.MISSING
 
         self.ensure_decrypted_gitignored()
         fs.atomic_symlink(decrypted_path, home_path)
-        self.ui.installed(home_path, encrypted=True)
+        self.ui.installed(home_path, encrypted=True, dirty=dirty)
         return SyncOutcome.INSTALLED
 
     def ensure_decrypted_gitignored(self) -> None:
@@ -517,3 +529,29 @@ class DotRepository:
             self.git.git.commit(message=f"[dots] {msg}")
         except GitError as e:
             self.ui.warning(f"git commit failed (filesystem change was applied): {e}")
+
+    def _git_commit_path(self, relpath: str, msg: str) -> bool:
+        if self.git is None:
+            return False
+        try:
+            self.git.git.add("--", relpath)
+            self.git.git.commit("--", relpath, message=f"[dots] {msg}")
+            return True
+        except GitError as e:
+            if "nothing to commit" not in str(e):
+                self.ui.warning(f"git commit failed (filesystem change was applied): {e}")
+            return False
+
+    def _dirty_relpaths(self) -> frozenset[str]:
+        if self.git is None:
+            return frozenset()
+        output: str = self.git.git.status("--porcelain", untracked_files="all")
+        if not output:
+            return frozenset()
+        paths: set[str] = set()
+        for line in output.splitlines():
+            path_part = line[3:]
+            if " -> " in path_part:
+                path_part = path_part.split(" -> ", 1)[1]
+            paths.add(path_part)
+        return frozenset(paths)
