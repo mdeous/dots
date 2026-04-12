@@ -9,7 +9,7 @@ authors = [
 ]
 requires-python = ">=3.12"
 dependencies = [
-    "gitpython>=3.1.46,<4",
+    "gitpython>=3.1.46",
     "rich>=15.0.0",
     "typer>=0.24.1",
 ]
