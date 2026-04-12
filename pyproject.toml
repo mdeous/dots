@@ -10,6 +10,7 @@ authors = [
 requires-python = ">=3.12"
 dependencies = [
     "gitpython>=3.1.46",
+    "pyrage>=1.3.0",
     "rich>=15.0.0",
     "typer>=0.24.1",
 ]
@@ -26,6 +27,7 @@ dev = [
     "pytest-cov>=7.1.0",
     "ruff>=0.15.10",
     "pyright>=1.1.408",
+    "pyrage-stubs>=1.3.1",
 ]
 
 [build-system]

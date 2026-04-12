@@ -55,20 +55,25 @@ class UI:
 
     # semantic helpers
 
-    def ok(self, path: Path) -> None:
-        self.out.print(f"  [ok]✓[/] {escape(str(path))}")
+    def ok(self, path: Path, *, encrypted: bool = False) -> None:
+        tag = " [meta](encrypted)[/]" if encrypted else ""
+        self.out.print(f"  [ok]✓[/] {escape(str(path))}{tag}")
 
-    def installed(self, path: Path) -> None:
-        self.out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]")
+    def installed(self, path: Path, *, encrypted: bool = False) -> None:
+        tag = " [meta](encrypted)[/]" if encrypted else ""
+        self.out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]{tag}")
 
-    def replaced(self, path: Path) -> None:
-        self.out.print(f"  [replace]↻[/] {escape(str(path))}")
+    def replaced(self, path: Path, *, encrypted: bool = False) -> None:
+        tag = " [meta](encrypted)[/]" if encrypted else ""
+        self.out.print(f"  [replace]↻[/] {escape(str(path))}{tag}")
 
-    def missing(self, path: Path) -> None:
-        self.out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing)[/]")
+    def missing(self, path: Path, *, encrypted: bool = False) -> None:
+        extra = ", encrypted" if encrypted else ""
+        self.out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing{extra})[/]")
 
-    def removed(self, path: Path) -> None:
-        self.out.print(f"  [missing]-[/] {escape(str(path))}")
+    def removed(self, path: Path, *, encrypted: bool = False) -> None:
+        tag = " [meta](encrypted)[/]" if encrypted else ""
+        self.out.print(f"  [missing]-[/] {escape(str(path))}{tag}")
 
     def conflict(self, path: Path, *, target: Path | None = None, reason: str = "") -> None:
         parts = [f"  [conflict]![/] {escape(str(path))}"]

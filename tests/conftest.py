@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+from pyrage import x25519
 
+from dots.crypto import AgeKeyPair
 from dots.repo import DotRepository
 from dots.ui import UI
 
@@ -44,4 +46,29 @@ def dot_repo(fake_home: Path, fake_repo: Path, stub_ui: StubUI) -> DotRepository
         ignored=(),
         git=None,
         ui=stub_ui,
+    )
+
+
+@pytest.fixture()
+def age_keypair() -> AgeKeyPair:
+    ident = x25519.Identity.generate()
+    return AgeKeyPair(identity=ident, recipient=ident.to_public())
+
+
+@pytest.fixture()
+def age_identity_file(tmp_path: Path, age_keypair: AgeKeyPair) -> Path:
+    key_file = tmp_path / "test.key"
+    key_file.write_text(f"# created: 2024-01-01\n# public key: {age_keypair.recipient}\n{age_keypair.identity}\n")
+    return key_file
+
+
+@pytest.fixture()
+def dot_repo_encrypted(fake_home: Path, fake_repo: Path, stub_ui: StubUI, age_keypair: AgeKeyPair) -> DotRepository:
+    return DotRepository(
+        path=fake_repo,
+        home=fake_home,
+        ignored=(),
+        git=None,
+        ui=stub_ui,
+        age_keypair=age_keypair,
     )

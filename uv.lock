@@ -122,12 +122,14 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "gitpython" },
+    { name = "pyrage" },
     { name = "rich" },
     { name = "typer" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "pyrage-stubs" },
     { name = "pyright" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -137,12 +139,14 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "gitpython", specifier = ">=3.1.46" },
+    { name = "pyrage", specifier = ">=1.3.0" },
     { name = "rich", specifier = ">=15.0.0" },
     { name = "typer", specifier = ">=0.24.1" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "pyrage-stubs", specifier = ">=1.3.1" },
     { name = "pyright", specifier = ">=1.1.408" },
     { name = "pytest", specifier = ">=9.0.3" },
     { name = "pytest-cov", specifier = ">=7.1.0" },
@@ -237,6 +241,30 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/c3/b2/bc9c9196916376152d655522fdcebac55e66de6603a76a02bca1b6414f6c/pygments-2.20.0.tar.gz", hash = "sha256:6757cd03768053ff99f3039c1a36d6c0aa0b263438fcab17520b30a303a82b5f", size = 4955991, upload-time = "2026-03-29T13:29:33.898Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/f4/7e/a72dd26f3b0f4f2bf1dd8923c85f7ceb43172af56d63c7383eb62b332364/pygments-2.20.0-py3-none-any.whl", hash = "sha256:81a9e26dd42fd28a23a2d169d86d7ac03b46e2f8b59ed4698fb4785f946d0176", size = 1231151, upload-time = "2026-03-29T13:29:30.038Z" },
+]
+
+[[package]]
+name = "pyrage"
+version = "1.3.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/ee/e8/918161376594d69b294e920bd6444f1d9997e6e6dd2aca18e15f1ef72463/pyrage-1.3.0.tar.gz", hash = "sha256:b283a2e3d688cbf68c707f57d93fdab3304ff57c7e2e6b710c0b4bc9096ad9da", size = 30120, upload-time = "2025-06-14T01:28:04.108Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/f7/6e/3095678ee12f0401e1de17f4d6993783b20a4b807daf69e23b170724e5f4/pyrage-1.3.0-cp39-abi3-macosx_10_12_x86_64.macosx_11_0_arm64.macosx_10_12_universal2.whl", hash = "sha256:907901ada8d63d674cc9005889150846c7349ef587ee8bf5e9278b79c54b4679", size = 1563258, upload-time = "2025-06-14T01:27:57.886Z" },
+    { url = "https://files.pythonhosted.org/packages/3b/e7/f515fbc972a5d83e9fa82d1c23a16f733f4dd6c2c6ae33d9054ca04a8d92/pyrage-1.3.0-cp39-abi3-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:ea452cb9c9c47083a96b309467dea5614d12530e1de4b6585f10aa04d3d19d1c", size = 785930, upload-time = "2025-06-14T01:27:59.755Z" },
+    { url = "https://files.pythonhosted.org/packages/38/f3/e91bf604fd40c42c60e8f95075cddb0b85d0bdf452f736b533b1bad550e0/pyrage-1.3.0-cp39-abi3-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ab066b22925c5a0ec5fead2e21e4586b21d5da730055c7e46caa978bd99de936", size = 847692, upload-time = "2025-06-14T01:28:01.042Z" },
+    { url = "https://files.pythonhosted.org/packages/88/59/15fd1945b02e6f93eff5a2ff352e67f85f51bf543769484f9bd960868c19/pyrage-1.3.0-cp39-abi3-win_amd64.whl", hash = "sha256:3be314a9746809c2710bfd144a6acf0c54a40f43e306857b9778a9d871ad97b3", size = 767566, upload-time = "2025-06-14T01:28:02.597Z" },
+]
+
+[[package]]
+name = "pyrage-stubs"
+version = "1.3.1"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pyrage" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/77/bd/71501ac456d645e811b9bca90886e593432c83e0f8ffa7c0a634c42368dd/pyrage_stubs-1.3.1.tar.gz", hash = "sha256:cf1a4473eee584314d396b87550c0a5d84e4b0e3f0ec54e4cae6d896ae50c2ba", size = 3251, upload-time = "2025-07-10T22:08:25.475Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/9b/12/bba3c55a336dbcb5e6d1be82c599cd33669c22e5fd5af3cd885c1304f890/pyrage_stubs-1.3.1-py3-none-any.whl", hash = "sha256:4e38b7ec6d89977147b7d213f931b0a0198918369144eec6df03c5eb83aabf1c", size = 4368, upload-time = "2025-07-10T22:08:23.943Z" },
 ]
 
 [[package]]

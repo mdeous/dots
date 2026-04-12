@@ -68,3 +68,13 @@ class FsError(DotsError):
     def __init__(self, message: str, path: Path) -> None:
         super().__init__(message)
         self.path = path
+
+
+class CryptoError(DotsError):
+    """
+    Age encryption or decryption failure.
+    """
+
+    def __init__(self, message: str, path: Path | None = None) -> None:
+        super().__init__(message)
+        self.path = path

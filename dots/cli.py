@@ -77,11 +77,15 @@ def app_main(
 def cmd_add(
     ctx: typer.Context,
     file: Annotated[Path, typer.Argument(help="path of the file to add")],
+    encrypt: Annotated[
+        bool,
+        typer.Option("--encrypt", "-e", help="encrypt the file with age"),
+    ] = False,
 ) -> None:
     """
     Add a file to the repository.
     """
-    load_repo(ctx).add(file)
+    load_repo(ctx).add(file, encrypt=encrypt)
 
 
 @app.command("remove")

@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from dots.errors import FsError
-from dots.fs import atomic_copy, atomic_symlink, ensure_parent_dir, is_inside, safe_unlink
+from dots.fs import atomic_copy, atomic_symlink, atomic_write, ensure_parent_dir, is_inside, safe_unlink
 
 
 def raise_oserror(*args: object, **kwargs: object) -> None:
@@ -220,6 +220,78 @@ class TestAtomicCopy:
             atomic_copy(src, dst)
 
         assert not any(tmp_path.glob("*.tmp"))
+
+
+class TestAtomicWrite:
+    def test_writes_content(self, tmp_path: Path) -> None:
+        dst = tmp_path / "out.bin"
+
+        atomic_write(dst, b"hello world")
+
+        assert dst.read_bytes() == b"hello world"
+
+    def test_replaces_existing_file(self, tmp_path: Path) -> None:
+        dst = tmp_path / "out.txt"
+        dst.write_bytes(b"old content")
+
+        atomic_write(dst, b"new content")
+
+        assert dst.read_bytes() == b"new content"
+
+    def test_creates_parent_dirs(self, tmp_path: Path) -> None:
+        dst = tmp_path / "a" / "b" / "c" / "file.bin"
+
+        atomic_write(dst, b"deep")
+
+        assert dst.read_bytes() == b"deep"
+
+    def test_empty_data(self, tmp_path: Path) -> None:
+        dst = tmp_path / "empty.bin"
+
+        atomic_write(dst, b"")
+
+        assert dst.read_bytes() == b""
+
+    def test_no_leftover_tmp_files(self, tmp_path: Path) -> None:
+        dst = tmp_path / "out.bin"
+
+        atomic_write(dst, b"data")
+
+        assert not any(tmp_path.glob("*.tmp"))
+
+    def test_replace_failure_raises_fserror_and_cleans_tmp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        dst = tmp_path / "out.bin"
+
+        monkeypatch.setattr(Path, "replace", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_write(dst, b"data")
+
+        assert not any(tmp_path.glob("*.tmp"))
+        assert not dst.exists()
+
+    def test_write_failure_raises_fserror_and_cleans_tmp(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        dst = tmp_path / "out.bin"
+
+        monkeypatch.setattr(Path, "write_bytes", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_write(dst, b"data")
+
+        assert not any(tmp_path.glob("*.tmp"))
+
+    def test_existing_file_untouched_on_failure(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        dst = tmp_path / "out.bin"
+        dst.write_bytes(b"original")
+
+        monkeypatch.setattr(Path, "replace", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_write(dst, b"replacement")
+
+        assert dst.read_bytes() == b"original"
 
 
 class TestSafeUnlink:

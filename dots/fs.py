@@ -78,6 +78,29 @@ def atomic_copy(src: Path, dst: Path) -> None:
         raise FsError(f"failed to install file at {dst}", dst) from e
 
 
+def atomic_write(dst: Path, data: bytes) -> None:
+    """
+    Atomically write ``data`` to ``dst``.
+
+    Writes to a sibling temp file then ``os.replace`` to commit.
+    On failure, ``dst`` is left in its previous state.
+    """
+    ensure_parent_dir(dst)
+    tmp = tmp_path(dst)
+    try:
+        tmp.write_bytes(data)
+    except OSError as e:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        raise FsError(f"failed to write to {dst}", dst) from e
+    try:
+        tmp.replace(dst)
+    except OSError as e:
+        with contextlib.suppress(FileNotFoundError):
+            tmp.unlink()
+        raise FsError(f"failed to install file at {dst}", dst) from e
+
+
 def safe_unlink(path: Path) -> None:
     """
     Remove ``path`` if it exists. Tolerant of missing paths.
