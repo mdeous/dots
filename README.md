@@ -2,7 +2,6 @@
 
 ![Python](https://img.shields.io/python/required-version-toml?tomlFilePath=https%3A%2F%2Fraw.githubusercontent.com%2Fmdeous%2Fdots%2Fmaster%2Fpyproject.toml)
 ![License](https://img.shields.io/github/license/mdeous/dots)
-
 [![CI](https://github.com/mdeous/dots/actions/workflows/ci.yml/badge.svg)](https://github.com/mdeous/dots/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/mdeous/dots/actions/workflows/github-code-scanning/codeql/badge.svg)](https://github.com/mdeous/dots/actions/workflows/github-code-scanning/codeql)
 
