@@ -15,17 +15,18 @@ def _tmp_path(target: Path) -> Path:
 
 
 def is_inside(child: Path, parent: Path) -> bool:
-    """Return True if ``child`` is at or under ``parent``.
+    """
+    Return True if ``child`` is at or under ``parent``.
 
-    Both paths are made absolute (prepending cwd if relative) but symlinks are
-    NOT followed. Call ``Path.resolve()`` before passing if you need
-    symlink-following containment.
+    Both paths are made absolute, but symlinks are NOT followed.
     """
     return child.absolute().is_relative_to(parent.absolute())
 
 
 def ensure_parent_dir(path: Path) -> None:
-    """Create all missing parent directories of ``path``."""
+    """
+    Create all missing parent directories of ``path``.
+    """
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
@@ -33,11 +34,11 @@ def ensure_parent_dir(path: Path) -> None:
 
 
 def atomic_symlink(target: Path, link: Path) -> None:
-    """Atomically create or replace a symlink at ``link`` pointing to ``target``.
+    """
+    Atomically create or replace a symlink at ``link`` pointing to ``target``.
 
     Works whether ``link`` is currently missing, a regular file, or an existing
-    symlink. At every moment an observer will see either the previous state or
-    the new symlink — never a missing path.
+    symlink.
     """
     ensure_parent_dir(link)
     tmp = _tmp_path(link)
@@ -54,10 +55,11 @@ def atomic_symlink(target: Path, link: Path) -> None:
 
 
 def atomic_copy(src: Path, dst: Path) -> None:
-    """Atomically install a copy of ``src`` at ``dst``.
+    """
+    Atomically install a copy of ``src`` at ``dst``.
 
     Copies to a sibling temp next to ``dst`` then ``os.replace`` to commit.
-    ``src`` is never touched — the caller decides whether to remove it.
+    ``src`` is never touched - the caller decides whether to remove it.
     On any failure, ``dst`` is left in its previous state.
     """
     ensure_parent_dir(dst)
@@ -77,7 +79,9 @@ def atomic_copy(src: Path, dst: Path) -> None:
 
 
 def safe_unlink(path: Path) -> None:
-    """Remove ``path`` if it exists. Tolerant of missing paths."""
+    """
+    Remove ``path`` if it exists. Tolerant of missing paths.
+    """
     try:
         path.unlink(missing_ok=True)
     except OSError as e:

@@ -35,7 +35,7 @@ class UI:
     _out: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=False))
     _err: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=True))
 
-    # -- lower-level (free-form messages) ----------------------------------
+    # lower-level (free-form messages)
 
     def debug(self, msg: str) -> None:
         if self.verbose:
@@ -53,7 +53,7 @@ class UI:
     def error(self, msg: str) -> None:
         self._err.print(f"[error]✗ {escape(msg)}[/]")
 
-    # -- semantic helpers --------------------------------------------------
+    # semantic helpers
 
     def ok(self, path: Path) -> None:
         self._out.print(f"  [ok]✓[/] {escape(str(path))}")
@@ -78,7 +78,7 @@ class UI:
             parts.append(f" [meta]({escape(reason)})[/]")
         self._err.print("".join(parts))
 
-    # -- session-level -----------------------------------------------------
+    # formatting helpers
 
     def section(self, title: str, *, emoji: str = "") -> None:
         prefix = f"{emoji} " if emoji else ""
@@ -90,7 +90,7 @@ class UI:
             return
         self._out.print(f"\n🎉 [bold]{changed}[/] changed, [meta]{unchanged} unchanged[/]")
 
-    # -- prompts -----------------------------------------------------------
+    # prompts
 
     def ask_yesno(self, prompt: str, *, default: bool = False) -> bool:
         if not sys.stdin.isatty():

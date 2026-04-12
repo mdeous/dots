@@ -36,10 +36,11 @@ class SyncOutcome(enum.Enum):
 
 
 def _load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
-    """Parse the config file and return ``(repo_dir, ignored_patterns)``.
+    """
+    Parse the config file and return ``(repo_dir, ignored_patterns)``.
 
     Selects a hostname-specific section if one is present, otherwise falls back
-    to ``[DEFAULT]``. Missing config file is not an error — defaults apply.
+    to ``[DEFAULT]``. Uses defaults if file is missing.
     """
     cfg = ConfigParser(defaults={"repo_dir": "~/dots", "ignored_files": ""})
     if config_path.is_file():
@@ -65,7 +66,9 @@ def _load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
 
 @dataclass(frozen=True)
 class DotRepository:
-    """A dotfiles repository: a directory whose contents are mirrored as symlinks in ``home``."""
+    """
+    A dotfiles repository.
+    """
 
     path: Path
     home: Path
@@ -95,16 +98,17 @@ class DotRepository:
             ui=ui,
         )
 
-    # ------------------------------------------------------------------
+    #
     # Public operations
-    # ------------------------------------------------------------------
+    #
 
     def add(self, target: Path) -> None:
-        """Move ``target`` into the repository and replace it with a symlink.
+        """
+        Move ``target`` into the repository and replace it with a symlink.
 
-        Safety: the file is *copied* into the repo first, then the symlink is
+        Safety: the file is copied into the repo first, then the symlink is
         installed atomically. If the symlink step fails the stray copy is
-        removed — the user's file is never in an unreachable state.
+        removed - the user's file is never in an unreachable state.
         """
         target = target.absolute()
         self.ui.debug(f"Adding '{target}' to the repository...")
@@ -113,11 +117,11 @@ class DotRepository:
         relpath = target.relative_to(self.home)
         repo_file = self.path / relpath
 
-        # Step 1: stage a copy in the repo. target is still intact.
+        # stage a copy in the repo
         self.ui.debug(f"Copying {target} to {repo_file}")
         fs.atomic_copy(target, repo_file)
 
-        # Step 2: replace target with a symlink. Atomic; on failure, roll back.
+        # replace target with a symlink, roll back on failure
         try:
             self.ui.debug(f"Creating symlink at {target}")
             fs.atomic_symlink(repo_file, target)
@@ -126,12 +130,13 @@ class DotRepository:
                 fs.safe_unlink(repo_file)
             raise
 
-        # Step 3: commit to git. Non-fatal.
+        # commit to git
         self._git_commit_safe(f"added {relpath.as_posix()}")
         self.ui.installed(target)
 
     def remove(self, target: Path) -> None:
-        """Restore a repository file to its original location and un-track it.
+        """
+        Restore a repository file to its original location and un-track it.
 
         Safety: the repo content is copied back to the home location first (an
         atomic ``os.replace`` that swaps the symlink for a regular file). Only
@@ -154,18 +159,18 @@ class DotRepository:
                 f"{home_file} does not point to {repo_file}", home_file
             )
 
-        # Step 1: install a regular-file copy at home_file (atomically replaces the symlink).
+        # install a regular-file copy at home_file (atomically replaces the symlink)
         self.ui.debug(f"Restoring {repo_file} to {home_file}")
         fs.atomic_copy(repo_file, home_file)
 
-        # Step 2: drop the repo-side copy.
+        # drop the repo-side copy
         self.ui.debug(f"Removing repo file {repo_file}")
         fs.safe_unlink(repo_file)
 
-        # Step 3: clean empty parent dirs in the repo.
+        # clean empty parent dirs in the repo
         self._rm_empty_folders(repo_file.parent)
 
-        # Step 4: commit.
+        # commit to git
         self._git_commit_safe(f"removed {relpath.as_posix()}")
         self.ui.removed(target)
 
@@ -207,9 +212,9 @@ class DotRepository:
 
         self.ui.summary(changed=changed, unchanged=unchanged)
 
-    # ------------------------------------------------------------------
+    #
     # Internals
-    # ------------------------------------------------------------------
+    #
 
     def _validate_addable(self, target: Path) -> None:
         if target.is_symlink():
@@ -228,7 +233,9 @@ class DotRepository:
             )
 
     def _iter_repo_files(self) -> Iterator[Path]:
-        """Yield every regular file under ``self.path``, skipping ``.git``."""
+        """
+        Yield every regular file under ``self.path``, skipping ``.git``.
+        """
         for p in sorted(self.path.rglob("*")):
             if not p.is_file():
                 continue
@@ -241,7 +248,8 @@ class DotRepository:
             yield p
 
     def _is_ignored(self, relpath: Path) -> bool:
-        """Match ``relpath`` (repo-relative) against the ignore patterns.
+        """
+        Match ``relpath`` (repo-relative) against the ignore patterns.
 
         Patterns starting with ``/`` are anchored to the repo root and match
         the full relative path. All other patterns match the filename only.
@@ -306,7 +314,9 @@ class DotRepository:
         return SyncOutcome.SKIPPED
 
     def _force_add(self, repo_file: Path, link_path: Path) -> None:
-        """Promote the user's local file to become the new repo version."""
+        """
+        Promote the user's local file to become the new repo version.
+        """
         self.ui.debug(f"Force-add: {link_path} -> {repo_file}")
         fs.atomic_copy(link_path, repo_file)
         fs.atomic_symlink(repo_file, link_path)
@@ -316,13 +326,17 @@ class DotRepository:
         self.ui.replaced(repo_file)
 
     def _force_link(self, repo_file: Path, link_path: Path) -> None:
-        """Replace the user's local file with a symlink pointing at the repo."""
+        """
+        Replace the user's local file with a symlink pointing at the repo.
+        """
         self.ui.debug(f"Force-link: {link_path} -> {repo_file}")
         fs.atomic_symlink(repo_file, link_path)
         self.ui.replaced(link_path)
 
     def _rm_empty_folders(self, leaf: Path) -> None:
-        """Iteratively delete empty directories up to ``self.path`` (exclusive)."""
+        """
+        Iteratively delete empty directories up to ``self.path`` (exclusive).
+        """
         while leaf != self.path and fs.is_inside(leaf, self.path):
             try:
                 if any(leaf.iterdir()):
@@ -342,7 +356,9 @@ class DotRepository:
             leaf = leaf.parent
 
     def _git_commit_safe(self, msg: str) -> None:
-        """Commit all repo changes — non-fatal on failure (closes H8)."""
+        """
+        Commit all repo changes - non-fatal on failure.
+        """
         if self.git is None:
             return
         try:

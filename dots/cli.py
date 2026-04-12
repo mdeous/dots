@@ -78,7 +78,9 @@ def cmd_add(
     ctx: typer.Context,
     file: Annotated[Path, typer.Argument(help="path of the file to add")],
 ) -> None:
-    """Add a file to the repository."""
+    """
+    Add a file to the repository.
+    """
     _load(ctx).add(file)
 
 
@@ -87,13 +89,17 @@ def cmd_remove(
     ctx: typer.Context,
     file: Annotated[Path, typer.Argument(help="path of the file to remove")],
 ) -> None:
-    """Remove a file from the repository."""
+    """
+    Remove a file from the repository.
+    """
     _load(ctx).remove(file)
 
 
 @app.command("list")
 def cmd_list(ctx: typer.Context) -> None:
-    """List repository contents."""
+    """
+    List repository contents.
+    """
     _load(ctx).sync(list_only=True)
 
 
@@ -125,7 +131,9 @@ def cmd_sync(
         ),
     ] = False,
 ) -> None:
-    """Synchronize repository content with the filesystem."""
+    """
+    Synchronize repository content with the filesystem.
+    """
     if force_add and force_link:
         raise typer.BadParameter(
             "--force-add and --force-link are mutually exclusive"
@@ -138,7 +146,9 @@ def cmd_sync(
 
 
 def main() -> None:
-    """Script entry point. Wraps ``app`` so ``DotsError`` produces clean output."""
+    """
+    Script entry point. Wraps ``app`` so ``DotsError`` produces clean output.
+    """
     try:
         app()
     except DotsError as e:
