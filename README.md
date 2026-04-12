@@ -77,7 +77,7 @@ dots [--config PATH] [--verbose] [--version] COMMAND
 | `--verbose` | `-v`  | Display debug information                     |
 | `--version` | `-V`  | Display version and exit                      |
 
-### `dots add <file>`
+### `dots add <file>` (alias: `a`)
 
 Add a file to the repository. The file is copied into the repo and replaced with a symlink.
 
@@ -92,7 +92,7 @@ dots add ~/.config/git/config
 
 When `--encrypt` is used, the file is stored as a `.age` file in the repo (encrypted at rest), with a decrypted working copy in a gitignored `.decrypted/` directory. The symlink points to the decrypted copy so the file remains usable. Requires `age_identity` to be set in the config.
 
-### `dots remove <file>`
+### `dots remove <file>` (aliases: `rm`, `rem`, `del`, `delete`)
 
 Remove a file from the repository. The symlink is replaced with the original file.
 
@@ -100,7 +100,7 @@ Remove a file from the repository. The symlink is replaced with the original fil
 dots remove ~/.bashrc
 ```
 
-### `dots list`
+### `dots list` (aliases: `l`, `ls`)
 
 List all files in the repository and their sync status.
 
@@ -108,7 +108,7 @@ List all files in the repository and their sync status.
 dots list
 ```
 
-### `dots sync`
+### `dots sync` (alias: `s`)
 
 Synchronize the repository with the filesystem. Creates missing symlinks and detects conflicts.
 
