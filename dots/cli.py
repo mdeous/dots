@@ -142,7 +142,7 @@ def main() -> None:
     try:
         app()
     except DotsError as e:
-        typer.secho(f"error: {e}", fg=typer.colors.RED, bold=True, err=True)
+        UI().error(str(e))
         sys.exit(1)
 
 

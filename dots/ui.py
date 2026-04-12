@@ -1,39 +1,98 @@
 from __future__ import annotations
 
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from pathlib import Path
 
 import typer
+from rich.console import Console
+from rich.markup import escape
+from rich.theme import Theme
+
+THEME = Theme(
+    {
+        "ok": "green",
+        "add": "bold green",
+        "replace": "cyan",
+        "missing": "red",
+        "conflict": "yellow",
+        "arrow": "dim",
+        "debug": "dim magenta",
+        "error": "bold red",
+        "meta": "dim",
+        "section": "bold",
+    }
+)
+
+
+def _make_console(*, stderr: bool) -> Console:
+    return Console(theme=THEME, stderr=stderr, highlight=False)
 
 
 @dataclass
 class UI:
-    """Thin terminal output helper.
-
-    Keeps ``repo.py`` decoupled from Typer's styling module. ``error`` reports
-    without terminating — termination belongs in the CLI error handler.
-    """
-
     verbose: bool = False
+    _out: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=False))
+    _err: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=True))
+
+    # -- lower-level (free-form messages) ----------------------------------
 
     def debug(self, msg: str) -> None:
         if self.verbose:
-            typer.secho(msg, fg=typer.colors.MAGENTA)
+            self._out.print(f"  [debug]•[/] [meta]{escape(msg)}[/]")
 
     def info(self, msg: str) -> None:
-        typer.secho(msg, fg=typer.colors.GREEN)
+        self._out.print(escape(msg))
 
     def notice(self, msg: str) -> None:
-        typer.secho(msg, fg=typer.colors.GREEN, bold=True)
+        self._out.print(f"[bold]{escape(msg)}[/]")
 
     def warning(self, msg: str) -> None:
-        typer.secho(msg, fg=typer.colors.YELLOW, err=True)
+        self._err.print(f"  [conflict]![/] {escape(msg)}")
 
     def error(self, msg: str) -> None:
-        typer.secho(msg, fg=typer.colors.RED, bold=True, err=True)
+        self._err.print(f"[error]✗ {escape(msg)}[/]")
+
+    # -- semantic helpers --------------------------------------------------
+
+    def ok(self, path: Path) -> None:
+        self._out.print(f"  [ok]✓[/] {escape(str(path))}")
+
+    def installed(self, path: Path) -> None:
+        self._out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]")
+
+    def replaced(self, path: Path) -> None:
+        self._out.print(f"  [replace]↻[/] {escape(str(path))}")
+
+    def missing(self, path: Path) -> None:
+        self._out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing)[/]")
+
+    def removed(self, path: Path) -> None:
+        self._out.print(f"  [missing]-[/] {escape(str(path))}")
+
+    def conflict(self, path: Path, *, target: Path | None = None, reason: str = "") -> None:
+        parts = [f"  [conflict]![/] {escape(str(path))}"]
+        if target is not None:
+            parts.append(f" [arrow]→[/] [meta]{escape(str(target))}[/]")
+        if reason:
+            parts.append(f" [meta]({escape(reason)})[/]")
+        self._err.print("".join(parts))
+
+    # -- session-level -----------------------------------------------------
+
+    def section(self, title: str, *, emoji: str = "") -> None:
+        prefix = f"{emoji} " if emoji else ""
+        self._out.print(f"\n{prefix}[section]{escape(title)}[/]\n")
+
+    def summary(self, *, changed: int, unchanged: int) -> None:
+        if changed == 0:
+            self._out.print(f"\n[meta]{unchanged} unchanged[/]")
+            return
+        self._out.print(f"\n🎉 [bold]{changed}[/] changed, [meta]{unchanged} unchanged[/]")
+
+    # -- prompts -----------------------------------------------------------
 
     def ask_yesno(self, prompt: str, *, default: bool = False) -> bool:
-        """Interactive yes/no prompt. Returns ``default`` on EOF (non-interactive)."""
         if not sys.stdin.isatty():
             return default
         return typer.confirm(prompt, default=default)

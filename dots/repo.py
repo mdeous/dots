@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import contextlib
+import enum
 import fnmatch
 import platform
 from collections.abc import Iterator
@@ -23,6 +24,15 @@ from dots.errors import (
     RepoError,
 )
 from dots.ui import UI
+
+
+class SyncOutcome(enum.Enum):
+    OK = "ok"
+    INSTALLED = "installed"
+    REPLACED = "replaced"
+    MISSING = "missing"
+    CONFLICT = "conflict"
+    SKIPPED = "skipped"
 
 
 def _load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
@@ -118,7 +128,7 @@ class DotRepository:
 
         # Step 3: commit to git. Non-fatal.
         self._git_commit_safe(f"added {relpath.as_posix()}")
-        self.ui.info(f"File added: {target}")
+        self.ui.installed(target)
 
     def remove(self, target: Path) -> None:
         """Restore a repository file to its original location and un-track it.
@@ -157,7 +167,7 @@ class DotRepository:
 
         # Step 4: commit.
         self._git_commit_safe(f"removed {relpath.as_posix()}")
-        self.ui.info(f"File removed: {target}")
+        self.ui.removed(target)
 
     def sync(
         self,
@@ -167,9 +177,13 @@ class DotRepository:
         force_add: bool = False,
         force_link: bool = False,
     ) -> None:
-        """Reconcile every repo file against its expected symlink under ``home``."""
         if not list_only:
-            self.ui.debug("Synchronizing repository files...")
+            self.ui.section("Syncing dotfiles", emoji="📦")
+        else:
+            self.ui.section("Listing dotfiles", emoji="📦")
+
+        changed = 0
+        unchanged = 0
 
         for repo_file in self._iter_repo_files():
             relpath = repo_file.relative_to(self.path)
@@ -178,7 +192,7 @@ class DotRepository:
                 continue
 
             link_path = self.home / relpath
-            self._sync_one(
+            outcome = self._sync_one(
                 repo_file=repo_file,
                 link_path=link_path,
                 list_only=list_only,
@@ -186,6 +200,12 @@ class DotRepository:
                 force_add=force_add,
                 force_link=force_link,
             )
+            if outcome == SyncOutcome.OK:
+                unchanged += 1
+            elif outcome in (SyncOutcome.INSTALLED, SyncOutcome.REPLACED):
+                changed += 1
+
+        self.ui.summary(changed=changed, unchanged=unchanged)
 
     # ------------------------------------------------------------------
     # Internals
@@ -242,47 +262,48 @@ class DotRepository:
         force_relink: bool,
         force_add: bool,
         force_link: bool,
-    ) -> None:
-        # Truly missing at the home location (not even a broken symlink)?
+    ) -> SyncOutcome:
         if not (link_path.is_symlink() or link_path.exists()):
             if list_only:
-                self.ui.notice(f"Missing: {link_path}")
-                return
+                self.ui.missing(link_path)
+                return SyncOutcome.MISSING
             fs.atomic_symlink(repo_file, link_path)
-            self.ui.info(f"Installed: {link_path}")
-            return
+            self.ui.installed(link_path)
+            return SyncOutcome.INSTALLED
 
         if link_path.is_symlink():
             link_target = link_path.resolve()
             if link_target == repo_file:
-                self.ui.info(f"OK: {link_path}")
-                return
+                self.ui.ok(link_path)
+                return SyncOutcome.OK
             state = "valid" if link_target.exists() else "broken"
-            self.ui.warning(
-                f"Conflict ({state} link): {link_path} -> {link_target}"
-            )
+            self.ui.conflict(link_path, target=link_target, reason=f"{state} link")
             if list_only:
-                return
+                return SyncOutcome.CONFLICT
             if not force_relink and not self.ui.ask_yesno(
                 "Overwrite existing link?", default=False
             ):
-                return
+                return SyncOutcome.SKIPPED
             fs.atomic_symlink(repo_file, link_path)
-            self.ui.info(f"Replaced link: {link_path}")
-            return
+            self.ui.replaced(link_path)
+            return SyncOutcome.REPLACED
 
-        # link_path exists as a regular file
-        self.ui.warning(f"Conflict (file exists): {link_path}")
+        self.ui.conflict(link_path, reason="file exists")
         if list_only:
-            return
+            return SyncOutcome.CONFLICT
         if force_add:
             self._force_add(repo_file, link_path)
-        elif force_link:
+            return SyncOutcome.REPLACED
+        if force_link:
             self._force_link(repo_file, link_path)
-        elif self.ui.ask_yesno("Replace repository file?", default=False):
+            return SyncOutcome.REPLACED
+        if self.ui.ask_yesno("Replace repository file?", default=False):
             self._force_add(repo_file, link_path)
-        elif self.ui.ask_yesno("Replace local file?", default=False):
+            return SyncOutcome.REPLACED
+        if self.ui.ask_yesno("Replace local file?", default=False):
             self._force_link(repo_file, link_path)
+            return SyncOutcome.REPLACED
+        return SyncOutcome.SKIPPED
 
     def _force_add(self, repo_file: Path, link_path: Path) -> None:
         """Promote the user's local file to become the new repo version."""
@@ -292,13 +313,13 @@ class DotRepository:
         self._git_commit_safe(
             f"force-updated {repo_file.relative_to(self.path).as_posix()}"
         )
-        self.ui.info(f"Repository file replaced: {repo_file}")
+        self.ui.replaced(repo_file)
 
     def _force_link(self, repo_file: Path, link_path: Path) -> None:
         """Replace the user's local file with a symlink pointing at the repo."""
         self.ui.debug(f"Force-link: {link_path} -> {repo_file}")
         fs.atomic_symlink(repo_file, link_path)
-        self.ui.info(f"Local file replaced: {link_path}")
+        self.ui.replaced(link_path)
 
     def _rm_empty_folders(self, leaf: Path) -> None:
         """Iteratively delete empty directories up to ``self.path`` (exclusive)."""
