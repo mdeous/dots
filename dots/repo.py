@@ -35,7 +35,7 @@ class SyncOutcome(enum.Enum):
     SKIPPED = "skipped"
 
 
-def _load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
+def load_config(config_path: Path) -> tuple[Path, tuple[str, ...]]:
     """
     Parse the config file and return ``(repo_dir, ignored_patterns)``.
 
@@ -79,7 +79,7 @@ class DotRepository:
     @classmethod
     def load(cls, config_path: Path, ui: UI) -> DotRepository:
         ui.debug(f"Loading configuration from {config_path}")
-        repo_dir, ignored = _load_config(config_path)
+        repo_dir, ignored = load_config(config_path)
         if not repo_dir.is_dir():
             raise RepoError(f"no dots repository found at {repo_dir}")
 
@@ -98,10 +98,6 @@ class DotRepository:
             ui=ui,
         )
 
-    #
-    # Public operations
-    #
-
     def add(self, target: Path) -> None:
         """
         Move ``target`` into the repository and replace it with a symlink.
@@ -112,7 +108,7 @@ class DotRepository:
         """
         target = target.absolute()
         self.ui.debug(f"Adding '{target}' to the repository...")
-        self._validate_addable(target)
+        self.validate_addable(target)
 
         relpath = target.relative_to(self.home)
         repo_file = self.path / relpath
@@ -131,7 +127,7 @@ class DotRepository:
             raise
 
         # commit to git
-        self._git_commit_safe(f"added {relpath.as_posix()}")
+        self.git_commit_safe(f"added {relpath.as_posix()}")
         self.ui.installed(target)
 
     def remove(self, target: Path) -> None:
@@ -168,10 +164,10 @@ class DotRepository:
         fs.safe_unlink(repo_file)
 
         # clean empty parent dirs in the repo
-        self._rm_empty_folders(repo_file.parent)
+        self.rm_empty_folders(repo_file.parent)
 
         # commit to git
-        self._git_commit_safe(f"removed {relpath.as_posix()}")
+        self.git_commit_safe(f"removed {relpath.as_posix()}")
         self.ui.removed(target)
 
     def sync(
@@ -190,14 +186,14 @@ class DotRepository:
         changed = 0
         unchanged = 0
 
-        for repo_file in self._iter_repo_files():
+        for repo_file in self.iter_repo_files():
             relpath = repo_file.relative_to(self.path)
-            if self._is_ignored(relpath):
+            if self.is_ignored(relpath):
                 self.ui.debug(f"Ignored: {relpath.as_posix()}")
                 continue
 
             link_path = self.home / relpath
-            outcome = self._sync_one(
+            outcome = self.sync_one(
                 repo_file=repo_file,
                 link_path=link_path,
                 list_only=list_only,
@@ -212,11 +208,7 @@ class DotRepository:
 
         self.ui.summary(changed=changed, unchanged=unchanged)
 
-    #
-    # Internals
-    #
-
-    def _validate_addable(self, target: Path) -> None:
+    def validate_addable(self, target: Path) -> None:
         if target.is_symlink():
             if fs.is_inside(target.resolve(), self.path):
                 raise AlreadyInRepoError(target)
@@ -232,22 +224,19 @@ class DotRepository:
                 f"file is already inside the repository: {target}", target
             )
 
-    def _iter_repo_files(self) -> Iterator[Path]:
+    def iter_repo_files(self) -> Iterator[Path]:
         """
         Yield every regular file under ``self.path``, skipping ``.git``.
         """
         for p in sorted(self.path.rglob("*")):
             if not p.is_file():
                 continue
-            try:
-                parts = p.relative_to(self.path).parts
-            except ValueError:
-                continue
+            parts = p.relative_to(self.path).parts
             if ".git" in parts:
                 continue
             yield p
 
-    def _is_ignored(self, relpath: Path) -> bool:
+    def is_ignored(self, relpath: Path) -> bool:
         """
         Match ``relpath`` (repo-relative) against the ignore patterns.
 
@@ -261,7 +250,7 @@ class DotRepository:
                 return True
         return False
 
-    def _sync_one(
+    def sync_one(
         self,
         *,
         repo_file: Path,
@@ -300,32 +289,32 @@ class DotRepository:
         if list_only:
             return SyncOutcome.CONFLICT
         if force_add:
-            self._force_add(repo_file, link_path)
+            self.force_add(repo_file, link_path)
             return SyncOutcome.REPLACED
         if force_link:
-            self._force_link(repo_file, link_path)
+            self.force_link(repo_file, link_path)
             return SyncOutcome.REPLACED
         if self.ui.ask_yesno("Replace repository file?", default=False):
-            self._force_add(repo_file, link_path)
+            self.force_add(repo_file, link_path)
             return SyncOutcome.REPLACED
         if self.ui.ask_yesno("Replace local file?", default=False):
-            self._force_link(repo_file, link_path)
+            self.force_link(repo_file, link_path)
             return SyncOutcome.REPLACED
         return SyncOutcome.SKIPPED
 
-    def _force_add(self, repo_file: Path, link_path: Path) -> None:
+    def force_add(self, repo_file: Path, link_path: Path) -> None:
         """
         Promote the user's local file to become the new repo version.
         """
         self.ui.debug(f"Force-add: {link_path} -> {repo_file}")
         fs.atomic_copy(link_path, repo_file)
         fs.atomic_symlink(repo_file, link_path)
-        self._git_commit_safe(
+        self.git_commit_safe(
             f"force-updated {repo_file.relative_to(self.path).as_posix()}"
         )
         self.ui.replaced(repo_file)
 
-    def _force_link(self, repo_file: Path, link_path: Path) -> None:
+    def force_link(self, repo_file: Path, link_path: Path) -> None:
         """
         Replace the user's local file with a symlink pointing at the repo.
         """
@@ -333,7 +322,7 @@ class DotRepository:
         fs.atomic_symlink(repo_file, link_path)
         self.ui.replaced(link_path)
 
-    def _rm_empty_folders(self, leaf: Path) -> None:
+    def rm_empty_folders(self, leaf: Path) -> None:
         """
         Iteratively delete empty directories up to ``self.path`` (exclusive).
         """
@@ -355,7 +344,7 @@ class DotRepository:
                 return
             leaf = leaf.parent
 
-    def _git_commit_safe(self, msg: str) -> None:
+    def git_commit_safe(self, msg: str) -> None:
         """
         Commit all repo changes - non-fatal on failure.
         """

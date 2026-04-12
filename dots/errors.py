@@ -65,7 +65,6 @@ class FsError(DotsError):
     Atomic filesystem primitive fails and has been rolled back.
     """
 
-    def __init__(self, message: str, path: Path, cause: BaseException | None = None) -> None:
+    def __init__(self, message: str, path: Path) -> None:
         super().__init__(message)
         self.path = path
-        self.__cause__ = cause

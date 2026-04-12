@@ -25,50 +25,50 @@ THEME = Theme(
 )
 
 
-def _make_console(*, stderr: bool) -> Console:
+def make_console(*, stderr: bool) -> Console:
     return Console(theme=THEME, stderr=stderr, highlight=False)
 
 
 @dataclass
 class UI:
     verbose: bool = False
-    _out: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=False))
-    _err: Console = field(init=False, repr=False, default_factory=lambda: _make_console(stderr=True))
+    out: Console = field(init=False, repr=False, default_factory=lambda: make_console(stderr=False))
+    err: Console = field(init=False, repr=False, default_factory=lambda: make_console(stderr=True))
 
     # lower-level (free-form messages)
 
     def debug(self, msg: str) -> None:
         if self.verbose:
-            self._out.print(f"  [debug]•[/] [meta]{escape(msg)}[/]")
+            self.out.print(f"  [debug]•[/] [meta]{escape(msg)}[/]")
 
     def info(self, msg: str) -> None:
-        self._out.print(escape(msg))
+        self.out.print(escape(msg))
 
     def notice(self, msg: str) -> None:
-        self._out.print(f"[bold]{escape(msg)}[/]")
+        self.out.print(f"[bold]{escape(msg)}[/]")
 
     def warning(self, msg: str) -> None:
-        self._err.print(f"  [conflict]![/] {escape(msg)}")
+        self.err.print(f"  [conflict]![/] {escape(msg)}")
 
     def error(self, msg: str) -> None:
-        self._err.print(f"[error]✗ {escape(msg)}[/]")
+        self.err.print(f"[error]✗ {escape(msg)}[/]")
 
     # semantic helpers
 
     def ok(self, path: Path) -> None:
-        self._out.print(f"  [ok]✓[/] {escape(str(path))}")
+        self.out.print(f"  [ok]✓[/] {escape(str(path))}")
 
     def installed(self, path: Path) -> None:
-        self._out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]")
+        self.out.print(f"  [add]+[/] [bold]{escape(str(path))}[/]")
 
     def replaced(self, path: Path) -> None:
-        self._out.print(f"  [replace]↻[/] {escape(str(path))}")
+        self.out.print(f"  [replace]↻[/] {escape(str(path))}")
 
     def missing(self, path: Path) -> None:
-        self._out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing)[/]")
+        self.out.print(f"  [missing]✗[/] {escape(str(path))} [meta](missing)[/]")
 
     def removed(self, path: Path) -> None:
-        self._out.print(f"  [missing]-[/] {escape(str(path))}")
+        self.out.print(f"  [missing]-[/] {escape(str(path))}")
 
     def conflict(self, path: Path, *, target: Path | None = None, reason: str = "") -> None:
         parts = [f"  [conflict]![/] {escape(str(path))}"]
@@ -76,19 +76,19 @@ class UI:
             parts.append(f" [arrow]→[/] [meta]{escape(str(target))}[/]")
         if reason:
             parts.append(f" [meta]({escape(reason)})[/]")
-        self._err.print("".join(parts))
+        self.err.print("".join(parts))
 
     # formatting helpers
 
     def section(self, title: str, *, emoji: str = "") -> None:
         prefix = f"{emoji} " if emoji else ""
-        self._out.print(f"\n{prefix}[section]{escape(title)}[/]\n")
+        self.out.print(f"\n{prefix}[section]{escape(title)}[/]\n")
 
     def summary(self, *, changed: int, unchanged: int) -> None:
         if changed == 0:
-            self._out.print(f"\n[meta]{unchanged} unchanged[/]")
+            self.out.print(f"\n[meta]{unchanged} unchanged[/]")
             return
-        self._out.print(f"\n🎉 [bold]{changed}[/] changed, [meta]{unchanged} unchanged[/]")
+        self.out.print(f"\n🎉 [bold]{changed}[/] changed, [meta]{unchanged} unchanged[/]")
 
     # prompts
 

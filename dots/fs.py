@@ -7,11 +7,11 @@ from pathlib import Path
 
 from dots.errors import FsError
 
-_TMP_TEMPLATE = ".{name}.dots-{pid}.tmp"
+TMP_TEMPLATE = ".{name}.dots-{pid}.tmp"
 
 
-def _tmp_path(target: Path) -> Path:
-    return target.with_name(_TMP_TEMPLATE.format(name=target.name, pid=os.getpid()))
+def tmp_path(target: Path) -> Path:
+    return target.with_name(TMP_TEMPLATE.format(name=target.name, pid=os.getpid()))
 
 
 def is_inside(child: Path, parent: Path) -> bool:
@@ -30,7 +30,7 @@ def ensure_parent_dir(path: Path) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise FsError(f"failed to create parent directory for {path}", path, cause=e) from e
+        raise FsError(f"failed to create parent directory for {path}", path) from e
 
 
 def atomic_symlink(target: Path, link: Path) -> None:
@@ -41,17 +41,17 @@ def atomic_symlink(target: Path, link: Path) -> None:
     symlink.
     """
     ensure_parent_dir(link)
-    tmp = _tmp_path(link)
+    tmp = tmp_path(link)
     try:
         tmp.symlink_to(target)
     except OSError as e:
-        raise FsError(f"failed to create symlink at {link}", link, cause=e) from e
+        raise FsError(f"failed to create symlink at {link}", link) from e
     try:
         tmp.replace(link)
     except OSError as e:
         with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
-        raise FsError(f"failed to install symlink at {link}", link, cause=e) from e
+        raise FsError(f"failed to install symlink at {link}", link) from e
 
 
 def atomic_copy(src: Path, dst: Path) -> None:
@@ -63,19 +63,19 @@ def atomic_copy(src: Path, dst: Path) -> None:
     On any failure, ``dst`` is left in its previous state.
     """
     ensure_parent_dir(dst)
-    tmp = _tmp_path(dst)
+    tmp = tmp_path(dst)
     try:
         shutil.copy2(src, tmp)
     except OSError as e:
         with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
-        raise FsError(f"failed to stage copy at {dst}", dst, cause=e) from e
+        raise FsError(f"failed to stage copy at {dst}", dst) from e
     try:
         tmp.replace(dst)
     except OSError as e:
         with contextlib.suppress(FileNotFoundError):
             tmp.unlink()
-        raise FsError(f"failed to install file at {dst}", dst, cause=e) from e
+        raise FsError(f"failed to install file at {dst}", dst) from e
 
 
 def safe_unlink(path: Path) -> None:
@@ -85,4 +85,4 @@ def safe_unlink(path: Path) -> None:
     try:
         path.unlink(missing_ok=True)
     except OSError as e:
-        raise FsError(f"failed to remove {path}", path, cause=e) from e
+        raise FsError(f"failed to remove {path}", path) from e

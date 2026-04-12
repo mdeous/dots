@@ -20,22 +20,22 @@ app = typer.Typer(
 )
 
 
-def _version_callback(value: bool) -> None:
+def version_callback(value: bool) -> None:
     if value:
         typer.echo(f"dots {VERSION}")
         raise typer.Exit
 
 
-def _config_callback(value: Path) -> Path:
+def config_callback(value: Path) -> Path:
     return value.expanduser()
 
 
-def _load(ctx: typer.Context) -> DotRepository:
-    state: _State = ctx.obj
+def load_repo(ctx: typer.Context) -> DotRepository:
+    state: State = ctx.obj
     return DotRepository.load(state.config, state.ui)
 
 
-class _State:
+class State:
     def __init__(self, config: Path, verbose: bool) -> None:
         self.config = config
         self.verbose = verbose
@@ -51,7 +51,7 @@ def app_main(
             "--config",
             "-c",
             help="configuration file",
-            callback=_config_callback,
+            callback=config_callback,
         ),
     ] = Path("~/.dots.conf"),
     verbose: Annotated[
@@ -64,13 +64,13 @@ def app_main(
             "--version",
             "-V",
             help="display program version and exit",
-            callback=_version_callback,
+            callback=version_callback,
             is_eager=True,
         ),
     ] = False,
 ) -> None:
-    _ = version  # consumed by _version_callback; silence unused-parameter checks
-    ctx.obj = _State(config=config, verbose=verbose)
+    _ = version  # consumed by version_callback; silence unused-parameter checks
+    ctx.obj = State(config=config, verbose=verbose)
 
 
 @app.command("add")
@@ -81,7 +81,7 @@ def cmd_add(
     """
     Add a file to the repository.
     """
-    _load(ctx).add(file)
+    load_repo(ctx).add(file)
 
 
 @app.command("remove")
@@ -92,7 +92,7 @@ def cmd_remove(
     """
     Remove a file from the repository.
     """
-    _load(ctx).remove(file)
+    load_repo(ctx).remove(file)
 
 
 @app.command("list")
@@ -100,7 +100,7 @@ def cmd_list(ctx: typer.Context) -> None:
     """
     List repository contents.
     """
-    _load(ctx).sync(list_only=True)
+    load_repo(ctx).sync(list_only=True)
 
 
 @app.command("sync")
@@ -138,7 +138,7 @@ def cmd_sync(
         raise typer.BadParameter(
             "--force-add and --force-link are mutually exclusive"
         )
-    _load(ctx).sync(
+    load_repo(ctx).sync(
         force_relink=force_relink,
         force_add=force_add,
         force_link=force_link,
