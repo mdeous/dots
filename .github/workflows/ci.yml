@@ -18,7 +18,7 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - run: uv sync --locked
+      - run: uv sync --frozen
       - run: uv run ruff format --check dots/ tests/
       - run: uv run ruff check dots/ tests/
       - run: uv run pyright
@@ -32,5 +32,5 @@ jobs:
         with:
           enable-cache: true
           cache-dependency-glob: "uv.lock"
-      - run: uv sync --locked
+      - run: uv sync --frozen
       - run: uv run pytest
