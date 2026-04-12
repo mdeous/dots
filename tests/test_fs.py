@@ -9,6 +9,10 @@ from dots.errors import FsError
 from dots.fs import atomic_copy, atomic_symlink, ensure_parent_dir, is_inside, safe_unlink
 
 
+def raise_oserror(*args: object, **kwargs: object) -> None:
+    raise OSError("simulated failure")
+
+
 class TestIsInside:
     def test_child_inside_parent(self, tmp_path: Path) -> None:
         child = tmp_path / "sub" / "file.txt"
@@ -114,6 +118,30 @@ class TestAtomicSymlink:
 
         assert not any(tmp_path.glob("*.tmp"))
 
+    def test_symlink_to_failure_raises_fserror(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        target = tmp_path / "target.txt"
+        target.write_text("data")
+        link = tmp_path / "link"
+
+        monkeypatch.setattr(Path, "symlink_to", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_symlink(target, link)
+
+    def test_replace_failure_raises_fserror_and_cleans_tmp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        target = tmp_path / "target.txt"
+        target.write_text("data")
+        link = tmp_path / "link"
+
+        monkeypatch.setattr(Path, "replace", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_symlink(target, link)
+
+        assert not any(tmp_path.glob("*.tmp"))
+
 
 class TestAtomicCopy:
     def test_copies_file_content(self, tmp_path: Path) -> None:
@@ -179,6 +207,20 @@ class TestAtomicCopy:
 
         assert not any(tmp_path.glob("*.tmp"))
 
+    def test_replace_failure_raises_fserror_and_cleans_tmp(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        src = tmp_path / "src.txt"
+        src.write_text("data")
+        dst = tmp_path / "dst.txt"
+
+        monkeypatch.setattr(Path, "replace", raise_oserror)
+
+        with pytest.raises(FsError):
+            atomic_copy(src, dst)
+
+        assert not any(tmp_path.glob("*.tmp"))
+
 
 class TestSafeUnlink:
     def test_removes_existing_file(self, tmp_path: Path) -> None:
@@ -202,3 +244,12 @@ class TestSafeUnlink:
 
     def test_missing_file_ok(self, tmp_path: Path) -> None:
         safe_unlink(tmp_path / "nonexistent")
+
+    def test_oserror_raises_fserror(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        f = tmp_path / "file.txt"
+        f.write_text("data")
+
+        monkeypatch.setattr(Path, "unlink", raise_oserror)
+
+        with pytest.raises(FsError):
+            safe_unlink(f)
