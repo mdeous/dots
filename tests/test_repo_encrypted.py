@@ -7,14 +7,10 @@ import pytest
 
 from dots import crypto
 from dots.crypto import AgeKeyPair, age_encrypt
-from dots.errors import CryptoError, FsError
+from dots.errors import AlreadyEncryptedError, CryptoError, FsError
 from dots.repo import DotRepository, SyncOutcome
 
 from .conftest import StubUI
-
-# ---------------------------------------------------------------------------
-# helpers
-# ---------------------------------------------------------------------------
 
 
 def _setup_encrypted_file(
@@ -50,11 +46,6 @@ def _setup_encrypted_file(
         gitignore.write_text(f"{marker}\n")
 
     return home_file, age_file, decrypted_file
-
-
-# ---------------------------------------------------------------------------
-# add --encrypt
-# ---------------------------------------------------------------------------
 
 
 class TestAddEncrypted:
@@ -173,11 +164,6 @@ class TestAddEncrypted:
         decrypted = fake_repo / ".decrypted" / "empty.txt"
         assert decrypted.read_bytes() == b""
         assert target.is_symlink()
-
-
-# ---------------------------------------------------------------------------
-# sync -- encrypted files
-# ---------------------------------------------------------------------------
 
 
 class TestSyncEncrypted:
@@ -365,11 +351,6 @@ class TestSyncEncrypted:
         assert decrypted.exists()
 
 
-# ---------------------------------------------------------------------------
-# remove -- encrypted files
-# ---------------------------------------------------------------------------
-
-
 class TestRemoveEncrypted:
     def test_restores_decrypted_content(
         self,
@@ -437,11 +418,6 @@ class TestRemoveEncrypted:
         assert not repo_file.exists()
 
 
-# ---------------------------------------------------------------------------
-# iter_repo_files -- .decrypted skipping
-# ---------------------------------------------------------------------------
-
-
 class TestIterRepoFilesEncrypted:
     def test_skips_decrypted_directory(self, dot_repo_encrypted: DotRepository, fake_repo: Path) -> None:
         (fake_repo / "normal.txt").write_text("a")
@@ -465,11 +441,6 @@ class TestIterRepoFilesEncrypted:
         relpaths = {f.relative_to(fake_repo).as_posix() for f in files}
 
         assert ".config/app.conf.age" in relpaths
-
-
-# ---------------------------------------------------------------------------
-# ensure_decrypted_gitignored
-# ---------------------------------------------------------------------------
 
 
 class TestEnsureDecryptedGitignored:
@@ -503,11 +474,6 @@ class TestEnsureDecryptedGitignored:
 
         content = (fake_repo / ".gitignore").read_text()
         assert "*.swp\n" in content
-
-
-# ---------------------------------------------------------------------------
-# git integration with encrypted files
-# ---------------------------------------------------------------------------
 
 
 class TestGitCommitEncrypted:
@@ -571,11 +537,6 @@ class TestGitCommitEncrypted:
         assert "encrypted" in call_msg
 
 
-# ---------------------------------------------------------------------------
-# validate_addable with encrypted files
-# ---------------------------------------------------------------------------
-
-
 class TestValidateAddableEncrypted:
     def test_already_tracked_encrypted_symlink(
         self,
@@ -591,3 +552,232 @@ class TestValidateAddableEncrypted:
 
         with pytest.raises(AlreadyInRepoError):
             dot_repo_encrypted.add(home_file)
+
+
+def _setup_tracked_file(
+    fake_home: Path,
+    fake_repo: Path,
+    relpath: str,
+    content: bytes = b"data",
+) -> tuple[Path, Path]:
+    """
+    Set up a plaintext tracked file as if ``add`` had already run.
+    Returns ``(home_file, repo_file)``.
+    """
+    repo_file = fake_repo / relpath
+    repo_file.parent.mkdir(parents=True, exist_ok=True)
+    repo_file.write_bytes(content)
+    home_file = fake_home / relpath
+    home_file.parent.mkdir(parents=True, exist_ok=True)
+    home_file.symlink_to(repo_file)
+    return home_file, repo_file
+
+
+class TestConvertPlainToEncrypted:
+    def test_converts_plain_to_encrypted(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        home_file, repo_file = _setup_tracked_file(fake_home, fake_repo, "secret.conf", b"api_key=12345")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        age_file = fake_repo / "secret.conf.age"
+        decrypted = fake_repo / ".decrypted" / "secret.conf"
+        assert age_file.exists()
+        assert decrypted.exists()
+        assert decrypted.read_bytes() == b"api_key=12345"
+        assert home_file.is_symlink()
+        assert home_file.resolve() == decrypted.resolve()
+        assert home_file.read_bytes() == b"api_key=12345"
+        assert not repo_file.exists()
+
+        # verify ciphertext is valid
+        plaintext = crypto.age_decrypt(age_file.read_bytes(), age_keypair.identity)
+        assert plaintext == b"api_key=12345"
+
+    def test_nested_path_conversion(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        home_file, repo_file = _setup_tracked_file(fake_home, fake_repo, ".config/app/secret.conf", b"nested")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        assert (fake_repo / ".config" / "app" / "secret.conf.age").exists()
+        assert (fake_repo / ".decrypted" / ".config" / "app" / "secret.conf").exists()
+        assert not repo_file.exists()
+
+    def test_gitignore_updated(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"data")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        gitignore = fake_repo / ".gitignore"
+        assert gitignore.exists()
+        assert f"/{crypto.DECRYPTED_DIR}/" in gitignore.read_text()
+
+    def test_old_repo_file_removed(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, repo_file = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"data")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        assert not repo_file.exists()
+
+    def test_empty_dirs_cleaned(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, ".config/app/secret.key", b"data")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        # old plain dirs should be cleaned (only file in that tree)
+        # but .config/app/ might still exist if .age file is there
+        age_file = fake_repo / ".config" / "app" / "secret.key.age"
+        assert age_file.exists()
+
+    def test_sibling_files_preserved(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, ".config/secret.key", b"data")
+        (fake_repo / ".config" / "other.conf").write_text("keep")
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        assert (fake_repo / ".config").is_dir()
+        assert (fake_repo / ".config" / "other.conf").exists()
+
+    def test_rollback_on_symlink_failure(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, repo_file = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"precious")
+
+        from unittest.mock import patch
+
+        with patch("dots.fs.atomic_symlink", side_effect=FsError("fail", home_file)), pytest.raises(FsError):
+            dot_repo_encrypted.add(home_file, encrypt=True)
+
+        # original tracking should be intact
+        assert home_file.is_symlink()
+        assert home_file.resolve() == repo_file.resolve()
+        assert repo_file.read_bytes() == b"precious"
+        # cleanup of .age and .decrypted copies
+        assert not (fake_repo / "secret.txt.age").exists()
+        assert not (fake_repo / ".decrypted" / "secret.txt").exists()
+
+    def test_no_age_key_raises(
+        self,
+        dot_repo: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"data")
+
+        with pytest.raises(CryptoError, match="no age identity configured"):
+            dot_repo.add(home_file, encrypt=True)
+
+    def test_already_encrypted_raises(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        home_file, _, _ = _setup_encrypted_file(fake_home, fake_repo, age_keypair, "secret.txt", b"data")
+
+        with pytest.raises(AlreadyEncryptedError):
+            dot_repo_encrypted.add(home_file, encrypt=True)
+
+    def test_user_declines_conversion(
+        self,
+        fake_home: Path,
+        fake_repo: Path,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        home_file, repo_file = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"data")
+        decline_ui = StubUI(yesno_answer=False)
+        repo = DotRepository(
+            path=fake_repo, home=fake_home, ignored=(), git=None, ui=decline_ui, age_keypair=age_keypair
+        )
+
+        repo.add(home_file, encrypt=True)
+
+        # nothing should have changed
+        assert home_file.is_symlink()
+        assert home_file.resolve() == repo_file.resolve()
+        assert not (fake_repo / "secret.txt.age").exists()
+        assert not (fake_repo / ".decrypted" / "secret.txt").exists()
+
+    def test_plain_readd_still_errors(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, "normal.conf", b"data")
+
+        from dots.errors import AlreadyInRepoError
+
+        with pytest.raises(AlreadyInRepoError):
+            dot_repo_encrypted.add(home_file)
+
+    def test_content_preserved(
+        self,
+        dot_repo_encrypted: DotRepository,
+        fake_home: Path,
+        fake_repo: Path,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        content = b"\x00\xff" * 512 + b"binary data \xfe\xfd"
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, "binary.dat", content)
+
+        dot_repo_encrypted.add(home_file, encrypt=True)
+
+        assert home_file.read_bytes() == content
+        age_file = fake_repo / "binary.dat.age"
+        decrypted = crypto.age_decrypt(age_file.read_bytes(), age_keypair.identity)
+        assert decrypted == content
+
+    def test_git_commit_message(
+        self,
+        fake_home: Path,
+        fake_repo: Path,
+        stub_ui: StubUI,
+        age_keypair: AgeKeyPair,
+    ) -> None:
+        home_file, _ = _setup_tracked_file(fake_home, fake_repo, "secret.txt", b"data")
+        mock_git = MagicMock()
+        repo = DotRepository(
+            path=fake_repo, home=fake_home, ignored=(), git=mock_git, ui=stub_ui, age_keypair=age_keypair
+        )
+
+        repo.add(home_file, encrypt=True)
+
+        call_msg = mock_git.git.commit.call_args[1]["message"]
+        assert "encrypted" in call_msg
+        assert "secret.txt" in call_msg

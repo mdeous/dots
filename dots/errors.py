@@ -50,6 +50,16 @@ class AlreadyInRepoError(DotsError):
         self.path = path
 
 
+class AlreadyEncryptedError(DotsError):
+    """
+    Trying to encrypt a file that is already encrypted.
+    """
+
+    def __init__(self, path: Path) -> None:
+        super().__init__(f"{path} is already encrypted")
+        self.path = path
+
+
 class InvalidTargetError(DotsError):
     """
     Target file is of an unexpected kind (e.g. a dangling symlink).

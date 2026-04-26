@@ -91,6 +91,8 @@ dots add ~/.config/git/config
 
 When `--encrypt` is used, the file is stored as a `.age` file in the repo (encrypted at rest), with a decrypted working copy in a gitignored `.decrypted/` directory. The symlink points to the decrypted copy so the file remains usable. Requires `age_identity` to be set in the config.
 
+If the file is already tracked as plaintext, `--encrypt` encrypts it and removes the tracked plaintext file.
+
 ### `dots remove <file>` (aliases: `rm`, `rem`, `del`, `delete`)
 
 Remove a file from the repository. The symlink is replaced with the original file.

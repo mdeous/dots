@@ -16,6 +16,7 @@ from git.exc import GitError
 from dots import crypto, fs
 from dots.crypto import AgeKeyPair
 from dots.errors import (
+    AlreadyEncryptedError,
     AlreadyInRepoError,
     ConfigError,
     CryptoError,
@@ -129,12 +130,26 @@ class DotRepository:
         ``.age`` file and a decrypted working copy in ``.decrypted/`` is
         used as the symlink target.
 
+        If ``encrypt`` is True and the file is already tracked as plaintext,
+        it is converted to encrypted tracking after user confirmation.
+
         Safety: the file is copied into the repo first, then the symlink is
         installed atomically. If the symlink step fails the stray copy is
         removed - the user's file is never in an unreachable state.
         """
         target = target.absolute()
         self.ui.debug(f"Adding '{target}' to the repository...")
+
+        if encrypt:
+            repo_file = self._tracked_plain_file(target)
+            if repo_file is not None:
+                if not self.ui.ask_yesno(f"Encrypt already tracked file '{target.name}'?", default=False):
+                    return
+                self._convert_plain_to_encrypted(target, repo_file)
+                return
+            if self._tracked_encrypted_file(target):
+                raise AlreadyEncryptedError(target)
+
         self.validate_addable(target)
 
         if encrypt:
@@ -190,6 +205,74 @@ class DotRepository:
             raise
 
         self.git_commit_safe(f"added {relpath.as_posix()} (encrypted)")
+        self.ui.installed(target, encrypted=True)
+
+    def _tracked_plain_file(self, target: Path) -> Path | None:
+        """
+        If *target* is a symlink pointing to a plaintext repo file, return
+        the resolved repo path.  Otherwise return ``None``.
+        """
+        if not target.is_symlink():
+            return None
+        resolved = target.resolve()
+        if not fs.is_inside(resolved, self.path):
+            return None
+        decrypted_dir = self.path / crypto.DECRYPTED_DIR
+        if fs.is_inside(resolved, decrypted_dir):
+            return None
+        return resolved
+
+    def _tracked_encrypted_file(self, target: Path) -> bool:
+        """Return ``True`` if *target* is tracked as an encrypted file."""
+        if not target.is_symlink():
+            return False
+        resolved = target.resolve()
+        if not fs.is_inside(resolved, self.path):
+            return False
+        decrypted_dir = self.path / crypto.DECRYPTED_DIR
+        return fs.is_inside(resolved, decrypted_dir)
+
+    def _convert_plain_to_encrypted(self, target: Path, repo_file: Path) -> None:
+        """
+        Convert an already-tracked plaintext file to encrypted tracking.
+
+        Safety: at every step the user's data is reachable through at least
+        one path (the original repo file, the new ``.age`` file, or the
+        ``.decrypted`` copy).  The old plaintext repo file is deleted last.
+        """
+        if self.age_keypair is None:
+            raise CryptoError("no age identity configured")
+
+        relpath = target.relative_to(self.home)
+        age_file = crypto.home_to_age_path(self.path, self.home, target)
+        decrypted_path = crypto.age_to_decrypted_path(self.path, age_file)
+
+        plaintext = repo_file.read_bytes()
+        ciphertext = crypto.age_encrypt(plaintext, self.age_keypair.recipient)
+
+        self.ui.debug(f"Encrypting {target} to {age_file}")
+        fs.atomic_write(age_file, ciphertext)
+
+        self.ui.debug(f"Writing decrypted copy to {decrypted_path}")
+        fs.atomic_write(decrypted_path, plaintext)
+
+        self.ensure_decrypted_gitignored()
+
+        try:
+            self.ui.debug(f"Repointing symlink at {target}")
+            fs.atomic_symlink(decrypted_path, target)
+        except DotsError:
+            with contextlib.suppress(DotsError):
+                fs.safe_unlink(age_file)
+            with contextlib.suppress(DotsError):
+                fs.safe_unlink(decrypted_path)
+            raise
+
+        self.ui.debug(f"Removing old plaintext repo file {repo_file}")
+        fs.safe_unlink(repo_file)
+        self.rm_empty_folders(repo_file.parent)
+
+        self.git_commit_safe(f"encrypted {relpath.as_posix()}")
         self.ui.installed(target, encrypted=True)
 
     def remove(self, target: Path) -> None:
